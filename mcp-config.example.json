@@ -1,0 +1,13 @@
+{
+    "mcpServers": {
+        "discord": {
+            "command": "node",
+            "args": ["dist/standalone.js"],
+            "cwd": "/path/to/mcp-discord",
+            "env": {
+                "DISCORD_TOKEN": "your-bot-token-here",
+                "DISCORD_USE_GATEWAY": "false"
+            }
+        }
+    }
+}

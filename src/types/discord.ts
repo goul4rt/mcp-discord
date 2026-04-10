@@ -1,0 +1,239 @@
+/**
+ * Shared types for the Discord MCP Server.
+ * These types decouple MCP tools from discord.js internals,
+ * making it possible to swap providers without touching tool logic.
+ */
+
+// ─── Server / Guild ─────────────────────────────────────────────
+
+export interface DiscordGuild {
+    id: string;
+    name: string;
+    icon: string | null;
+    memberCount: number;
+    ownerId: string;
+    description: string | null;
+    createdAt: string;
+    features: string[];
+}
+
+export interface DiscordGuildDetailed extends DiscordGuild {
+    roles: DiscordRole[];
+    channels: DiscordChannelSummary[];
+    emojis: { id: string; name: string; animated: boolean }[];
+    boostLevel: number;
+    boostCount: number;
+}
+
+// ─── Channel ────────────────────────────────────────────────────
+
+export interface DiscordChannelSummary {
+    id: string;
+    name: string;
+    type: ChannelType;
+    parentId: string | null;
+    parentName: string | null;
+    position: number;
+    topic: string | null;
+}
+
+export interface DiscordChannel extends DiscordChannelSummary {
+    guildId: string;
+    nsfw: boolean;
+    rateLimitPerUser: number;
+    createdAt: string;
+}
+
+export enum ChannelType {
+    TEXT = 'text',
+    VOICE = 'voice',
+    CATEGORY = 'category',
+    ANNOUNCEMENT = 'announcement',
+    STAGE = 'stage',
+    FORUM = 'forum',
+    THREAD = 'thread',
+    UNKNOWN = 'unknown',
+}
+
+export interface CreateChannelOptions {
+    guildId: string;
+    name: string;
+    type?: ChannelType;
+    topic?: string;
+    parentId?: string;
+    nsfw?: boolean;
+    rateLimitPerUser?: number;
+    position?: number;
+}
+
+export interface EditChannelOptions {
+    channelId: string;
+    name?: string;
+    topic?: string;
+    nsfw?: boolean;
+    rateLimitPerUser?: number;
+    position?: number;
+    parentId?: string | null;
+}
+
+// ─── Message ────────────────────────────────────────────────────
+
+export interface DiscordMessage {
+    id: string;
+    channelId: string;
+    guildId: string | null;
+    author: {
+        id: string;
+        username: string;
+        displayName: string;
+        bot: boolean;
+    };
+    content: string;
+    timestamp: string;
+    editedTimestamp: string | null;
+    attachments: { url: string; name: string; size: number }[];
+    embeds: DiscordEmbed[];
+    reactions: { emoji: string; count: number; me: boolean }[];
+    replyTo: string | null;
+    pinned: boolean;
+}
+
+export interface DiscordEmbed {
+    title?: string;
+    description?: string;
+    url?: string;
+    color?: number;
+    fields?: { name: string; value: string; inline?: boolean }[];
+    footer?: { text: string; iconUrl?: string };
+    thumbnail?: { url: string };
+    image?: { url: string };
+    author?: { name: string; url?: string; iconUrl?: string };
+    timestamp?: string;
+}
+
+export interface SendMessageOptions {
+    channelId: string;
+    content?: string;
+    embeds?: DiscordEmbed[];
+    replyToMessageId?: string;
+}
+
+export interface ReadMessagesOptions {
+    channelId: string;
+    limit?: number;
+    before?: string;
+    after?: string;
+    around?: string;
+}
+
+export interface SearchMessagesOptions {
+    guildId: string;
+    query?: string;
+    authorId?: string;
+    channelId?: string;
+    before?: string;
+    after?: string;
+    limit?: number;
+}
+
+// ─── Member / User ──────────────────────────────────────────────
+
+export interface DiscordMember {
+    userId: string;
+    username: string;
+    displayName: string;
+    nickname: string | null;
+    avatar: string | null;
+    roles: { id: string; name: string; color: number }[];
+    joinedAt: string;
+    bot: boolean;
+    status?: 'online' | 'idle' | 'dnd' | 'offline';
+}
+
+export interface DiscordUser {
+    id: string;
+    username: string;
+    displayName: string;
+    avatar: string | null;
+    bot: boolean;
+    createdAt: string;
+    banner: string | null;
+}
+
+// ─── Role ───────────────────────────────────────────────────────
+
+export interface DiscordRole {
+    id: string;
+    name: string;
+    color: number;
+    position: number;
+    permissions: string;
+    mentionable: boolean;
+    managed: boolean;
+    memberCount?: number;
+}
+
+export interface CreateRoleOptions {
+    guildId: string;
+    name: string;
+    color?: number;
+    permissions?: string[];
+    mentionable?: boolean;
+    hoist?: boolean;
+}
+
+// ─── Moderation ─────────────────────────────────────────────────
+
+export interface TimeoutOptions {
+    guildId: string;
+    userId: string;
+    durationMs: number;
+    reason?: string;
+}
+
+export interface BanOptions {
+    guildId: string;
+    userId: string;
+    reason?: string;
+    deleteMessageSeconds?: number;
+}
+
+export interface KickOptions {
+    guildId: string;
+    userId: string;
+    reason?: string;
+}
+
+// ─── Audit Log ──────────────────────────────────────────────────
+
+export interface AuditLogEntry {
+    id: string;
+    action: string;
+    executorId: string | null;
+    executorName: string | null;
+    targetId: string | null;
+    targetType: string | null;
+    reason: string | null;
+    createdAt: string;
+    changes: { key: string; old?: string; new?: string }[];
+}
+
+// ─── Thread ─────────────────────────────────────────────────────
+
+export interface CreateThreadOptions {
+    channelId: string;
+    name: string;
+    messageId?: string;
+    autoArchiveDuration?: 60 | 1440 | 4320 | 10080;
+    reason?: string;
+}
+
+// ─── Pagination ─────────────────────────────────────────────────
+
+export interface PaginatedResult<T> {
+    items: T[];
+    total?: number;
+    hasMore: boolean;
+    cursor?: string;
+    error?: string;
+}

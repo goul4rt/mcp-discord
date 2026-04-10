@@ -1,0 +1,62 @@
+{
+    "name": "mcp-discord",
+    "version": "0.1.0",
+    "description": "The most complete open-source MCP server for Discord — 30+ tools, dual-mode: integrated (plugin) or standalone",
+    "author": "goul4rt",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/goul4rt/mcp-discord.git"
+    },
+    "homepage": "https://github.com/goul4rt/mcp-discord#readme",
+    "bugs": {
+        "url": "https://github.com/goul4rt/mcp-discord/issues"
+    },
+    "keywords": [
+        "mcp",
+        "discord",
+        "model-context-protocol",
+        "discord-bot",
+        "llm",
+        "ai",
+        "claude"
+    ],
+    "type": "module",
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "exports": {
+        ".": "./dist/index.js",
+        "./provider": "./dist/providers/index.js",
+        "./standalone": "./dist/standalone.js"
+    },
+    "bin": {
+        "mcp-discord": "./dist/standalone.js"
+    },
+    "scripts": {
+        "build": "tsc --project tsconfig.json",
+        "dev": "tsx watch src/standalone.ts",
+        "start": "node dist/standalone.js",
+        "start:stdio": "node dist/standalone.js --transport stdio",
+        "start:http": "node dist/standalone.js --transport http --port 3100",
+        "lint": "eslint . --cache --ext .ts",
+        "lint:fix": "eslint . --fix --cache --ext .ts",
+        "format": "prettier --check .",
+        "format:fix": "prettier --write .",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.12.1",
+        "discord.js": "^14.16.3",
+        "zod": "^3.23.8"
+    },
+    "devDependencies": {
+        "@types/node": "^22.0.0",
+        "eslint": "^9.0.0",
+        "prettier": "^3.3.0",
+        "tsx": "^4.19.0",
+        "typescript": "^5.5.0",
+        "vitest": "^2.1.0"
+    }
+}
