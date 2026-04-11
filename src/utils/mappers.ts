@@ -28,6 +28,8 @@ import {
     type DiscordRole,
     type DiscordUser,
     type Invite,
+    type ScreeningField,
+    type WelcomeScreen,
 } from '../types/discord.js';
 
 // ─── Channel Type Mapping ───────────────────────────────────────
@@ -200,6 +202,39 @@ export function mapRole(role: Role): DiscordRole {
         mentionable: role.mentionable,
         managed: role.managed,
         memberCount: role.members.size,
+    };
+}
+
+// ─── Welcome Screen / Membership Screening ─────────────────────
+
+export function mapWelcomeScreen(welcomeScreen: any): WelcomeScreen {
+    const channels = welcomeScreen?.welcomeChannels;
+    const list: any[] = channels
+        ? (typeof channels.values === 'function' ? Array.from(channels.values()) : Array.from(channels))
+        : [];
+    return {
+        description: welcomeScreen?.description ?? null,
+        welcomeChannels: list.map((wc: any): ScreeningField => {
+            const emoji = wc?.emoji ?? null;
+            return {
+                channelId: wc?.channelId ?? wc?.channel_id ?? '',
+                description: wc?.description ?? '',
+                emojiName: emoji?.name ?? null,
+                emojiId: emoji?.id ?? null,
+            };
+        }),
+    };
+}
+
+export function mapApiWelcomeScreen(raw: any): WelcomeScreen {
+    return {
+        description: raw?.description ?? null,
+        welcomeChannels: (raw?.welcome_channels ?? []).map((wc: any): ScreeningField => ({
+            channelId: wc.channel_id,
+            description: wc.description ?? '',
+            emojiName: wc.emoji_name ?? null,
+            emojiId: wc.emoji_id ?? null,
+        })),
     };
 }
 

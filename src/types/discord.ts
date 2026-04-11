@@ -265,3 +265,24 @@ export interface PaginatedResult<T> {
     cursor?: string;
     error?: string;
 }
+
+// ─── Membership Screening ───────────────────────────────────────
+
+export interface ScreeningField {
+    channelId: string;
+    description: string;
+    emojiName: string | null;
+    emojiId: string | null;
+}
+
+export interface WelcomeScreen {
+    description: string | null;
+    welcomeChannels: ScreeningField[];
+}
+
+export interface UpdateWelcomeScreenOptions {
+    guildId: string;
+    enabled?: boolean;
+    description?: string;
+    welcomeChannels?: ScreeningField[];
+}

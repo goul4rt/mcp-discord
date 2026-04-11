@@ -76,8 +76,8 @@ describe('snowflake ID schema', () => {
 });
 
 describe('tool registry', () => {
-    it('exposes all 39 tools via allTools', () => {
-        expect(allTools).toHaveLength(39);
+    it('exposes all 41 tools via allTools', () => {
+        expect(allTools).toHaveLength(41);
     });
 
     it('has a unique name per tool', () => {
@@ -584,6 +584,75 @@ describe('moderation tools', () => {
         );
         expect(provider.unbanUser).toHaveBeenCalledWith(GUILD, USER, 'appeal');
         expect(result).toEqual({ success: true });
+    });
+});
+
+describe('screening tools', () => {
+    const GUILD = '123456789012345678';
+    const CHANNEL = '234567890123456789';
+    const EMOJI = '345678901234567890';
+
+    it('get_membership_screening calls provider.getWelcomeScreen with the guild_id', async () => {
+        const tool = findTool('get_membership_screening');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.getWelcomeScreen).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('get_membership_screening schema rejects missing guild_id', () => {
+        const tool = findTool('get_membership_screening');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('update_membership_screening transforms snake_case to camelCase', async () => {
+        const tool = findTool('update_membership_screening');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                enabled: true,
+                description: 'Welcome!',
+                welcome_channels: [
+                    { channel_id: CHANNEL, description: 'General chat', emoji_name: 'wave', emoji_id: EMOJI },
+                ],
+            },
+            provider,
+        );
+        expect(provider.updateWelcomeScreen).toHaveBeenCalledWith({
+            guildId: GUILD,
+            enabled: true,
+            description: 'Welcome!',
+            welcomeChannels: [
+                { channelId: CHANNEL, description: 'General chat', emojiName: 'wave', emojiId: EMOJI },
+            ],
+        });
+    });
+
+    it('update_membership_screening omits undefined optional fields', async () => {
+        const tool = findTool('update_membership_screening');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, enabled: false }, provider);
+        expect(provider.updateWelcomeScreen).toHaveBeenCalledWith({
+            guildId: GUILD,
+            enabled: false,
+            description: undefined,
+            welcomeChannels: undefined,
+        });
+    });
+
+    it('update_membership_screening schema rejects a welcome channel without channel_id', () => {
+        const tool = findTool('update_membership_screening');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                welcome_channels: [{ description: 'missing channel' }],
+            }),
+        ).toThrow();
+    });
+
+    it('update_membership_screening schema allows empty welcome_channels array', () => {
+        const tool = findTool('update_membership_screening');
+        expect(() => tool.schema.parse({ guild_id: GUILD, welcome_channels: [] })).not.toThrow();
     });
 });
 

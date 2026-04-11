@@ -618,7 +618,44 @@ const scheduledEventTools: ToolDefinition[] = [];
 // SCREENING TOOLS — populated by PR 6b (feat/screening)
 // ═════════════════════════════════════════════════════════════════
 
-const screeningTools: ToolDefinition[] = [];
+const welcomeChannelSchema = z.object({
+    channel_id: snowflakeId.describe('The channel shown in the welcome screen'),
+    description: z.string().describe('Short description displayed next to the channel'),
+    emoji_name: z.string().nullable().optional().describe('Unicode emoji or custom emoji name'),
+    emoji_id: snowflakeId.nullable().optional().describe('Custom emoji ID, if applicable'),
+});
+
+const screeningTools: ToolDefinition[] = [
+    {
+        name: 'get_membership_screening',
+        description: 'Get the welcome screen / membership screening form for a Community server. Returns the description and featured welcome channels shown to new members.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The Discord server (guild) ID'),
+        }),
+        handler: async (input, provider) => provider.getWelcomeScreen(input.guild_id),
+    },
+    {
+        name: 'update_membership_screening',
+        description: 'Update the welcome screen for new members. Can enable/disable the screen, change the description, and set up to 5 featured welcome channels. All fields are optional; only provided fields are modified.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The Discord server (guild) ID'),
+            enabled: z.boolean().optional().describe('Whether the welcome screen is enabled'),
+            description: z.string().optional().describe('Server description shown in the welcome screen (up to 140 chars)'),
+            welcome_channels: z.array(welcomeChannelSchema).max(5).optional().describe('Up to 5 featured channels shown to new members'),
+        }),
+        handler: async (input, provider) => provider.updateWelcomeScreen({
+            guildId: input.guild_id,
+            enabled: input.enabled,
+            description: input.description,
+            welcomeChannels: input.welcome_channels?.map((wc: any) => ({
+                channelId: wc.channel_id,
+                description: wc.description,
+                emojiName: wc.emoji_name ?? null,
+                emojiId: wc.emoji_id ?? null,
+            })),
+        }),
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
 // ALL TOOLS — flat registry
