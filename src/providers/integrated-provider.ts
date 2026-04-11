@@ -21,7 +21,7 @@
  */
 
 import type { Client, FetchMessagesOptions, GuildBasedChannel, GuildChannel, GuildMember, TextChannel, Role, ThreadChannel, User } from 'discord.js';
-import { ChannelType as DjsChannelType } from 'discord.js';
+import { ChannelType as DjsChannelType, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, Routes } from 'discord.js';
 
 import type { DiscordProvider, IntegratedProviderConfig } from './discord-provider.js';
 import { assertTextChannel, assertGuildChannel, assertThreadChannel } from '../utils/guards.js';
@@ -47,6 +47,7 @@ import type {
     KickOptions,
     PaginatedResult,
     ReadMessagesOptions,
+    ScheduledEvent,
     SearchMessagesOptions,
     SendMessageOptions,
     TimeoutOptions,
@@ -54,7 +55,12 @@ import type {
     WelcomeScreen,
 } from '../types/discord.js';
 import type { SendDMOptions } from './capabilities/dms.js';
-import { mapApiWelcomeScreen, mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapInvite, mapMember, mapMessage, mapRole, mapUser, mapWelcomeScreen } from '../utils/mappers.js';
+import type {
+    CreateScheduledEventOptions,
+    EditScheduledEventOptions,
+    ScheduledEventInvite,
+} from './capabilities/scheduledEvents.js';
+import { mapApiWelcomeScreen, mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapInvite, mapMember, mapMessage, mapRole, mapScheduledEvent, mapUser, mapWelcomeScreen } from '../utils/mappers.js';
 
 export class IntegratedProvider implements DiscordProvider {
     readonly name = 'integrated';
@@ -467,7 +473,97 @@ export class IntegratedProvider implements DiscordProvider {
     }
 
     // ─── Scheduled Events ────────────────────────────────────────
-    // Methods added by PR 5 (feat/scheduled-events).
+
+    async listScheduledEvents(guildId: string): Promise<ScheduledEvent[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const events = await guild.scheduledEvents.fetch();
+        return events.map(e => mapScheduledEvent(e));
+    }
+
+    async getScheduledEvent(guildId: string, eventId: string): Promise<ScheduledEvent> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const event = await guild.scheduledEvents.fetch(eventId);
+        return mapScheduledEvent(event);
+    }
+
+    async createScheduledEvent(options: CreateScheduledEventOptions): Promise<ScheduledEvent> {
+        if (options.entityType === 'EXTERNAL') {
+            if (!options.location) {
+                throw new Error('create_scheduled_event: location is required when entity_type is external');
+            }
+            if (!options.scheduledEndTime) {
+                throw new Error('create_scheduled_event: scheduled_end_time is required when entity_type is external');
+            }
+        } else {
+            if (!options.channelId) {
+                throw new Error(`create_scheduled_event: channel_id is required when entity_type is ${options.entityType.toLowerCase()}`);
+            }
+        }
+
+        const guild = await this.client.guilds.fetch(options.guildId);
+        const djsType = options.entityType === 'VOICE'
+            ? GuildScheduledEventEntityType.Voice
+            : options.entityType === 'STAGE_INSTANCE'
+                ? GuildScheduledEventEntityType.StageInstance
+                : GuildScheduledEventEntityType.External;
+
+        const createOptions: any = {
+            name: options.name,
+            scheduledStartTime: options.scheduledStartTime,
+            privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
+            entityType: djsType,
+        };
+        if (options.scheduledEndTime) createOptions.scheduledEndTime = options.scheduledEndTime;
+        if (options.description) createOptions.description = options.description;
+        if (options.channelId) createOptions.channel = options.channelId;
+        if (options.location) createOptions.entityMetadata = { location: options.location };
+
+        const event = await guild.scheduledEvents.create(createOptions);
+        return mapScheduledEvent(event);
+    }
+
+    async editScheduledEvent(options: EditScheduledEventOptions): Promise<ScheduledEvent> {
+        const guild = await this.client.guilds.fetch(options.guildId);
+        const editOptions: any = {};
+        if (options.name !== undefined) editOptions.name = options.name;
+        if (options.scheduledStartTime !== undefined) editOptions.scheduledStartTime = options.scheduledStartTime;
+        if (options.scheduledEndTime !== undefined) editOptions.scheduledEndTime = options.scheduledEndTime;
+        if (options.description !== undefined) editOptions.description = options.description;
+        if (options.channelId !== undefined) editOptions.channel = options.channelId;
+        if (options.location !== undefined) editOptions.entityMetadata = { location: options.location };
+        if (options.entityType !== undefined) {
+            editOptions.entityType = options.entityType === 'VOICE'
+                ? GuildScheduledEventEntityType.Voice
+                : options.entityType === 'STAGE_INSTANCE'
+                    ? GuildScheduledEventEntityType.StageInstance
+                    : GuildScheduledEventEntityType.External;
+        }
+        const edited = await guild.scheduledEvents.edit(options.eventId, editOptions);
+        return mapScheduledEvent(edited);
+    }
+
+    async deleteScheduledEvent(guildId: string, eventId: string): Promise<void> {
+        const guild = await this.client.guilds.fetch(guildId);
+        await guild.scheduledEvents.delete(eventId);
+    }
+
+    async getEventSubscribers(guildId: string, eventId: string, limit?: number): Promise<DiscordUser[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const event = await guild.scheduledEvents.fetch(eventId);
+        const subscribers = await event.fetchSubscribers({ limit });
+        return subscribers.map((s: any) => mapUser(s.user as User));
+    }
+
+    async createEventInvite(_guildId: string, eventId: string, channelId: string): Promise<ScheduledEventInvite> {
+        const invite = (await this.client.rest.post(Routes.channelInvites(channelId), {
+            body: {},
+        })) as { code: string };
+        return {
+            code: invite.code,
+            url: `https://discord.gg/${invite.code}?event=${eventId}`,
+            eventId,
+        };
+    }
 
     // ─── Screening ───────────────────────────────────────────────
 
