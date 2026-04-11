@@ -1,0 +1,159 @@
+// src/utils/mappers.test.ts
+import { describe, it, expect } from 'vitest';
+import { ChannelType as DjsChannelType } from 'discord.js';
+import {
+    mapChannelType,
+    mapGuild,
+    mapGuildDetailed,
+    mapChannelSummary,
+    mapChannel,
+    mapMessage,
+    mapMember,
+    mapUser,
+    mapRole,
+    mapApiMessage,
+} from './mappers.js';
+import { ChannelType } from '../types/discord.js';
+
+// ─── Fixture helpers ────────────────────────────────────────────
+
+function makeFakeRole(overrides: Record<string, any> = {}): any {
+    return {
+        id: '111',
+        name: 'Admin',
+        color: 0xff0000,
+        position: 1,
+        permissions: { bitfield: 8n },
+        mentionable: true,
+        managed: false,
+        members: { size: 3 },
+        ...overrides,
+    };
+}
+
+function makeFakeChannel(overrides: Record<string, any> = {}): any {
+    return {
+        id: '222',
+        name: 'general',
+        type: DjsChannelType.GuildText,
+        parentId: null,
+        parent: null,
+        position: 0,
+        topic: 'hello',
+        guildId: '333',
+        nsfw: false,
+        rateLimitPerUser: 0,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        ...overrides,
+    };
+}
+
+function makeFakeGuild(overrides: Record<string, any> = {}): any {
+    return {
+        id: '333',
+        name: 'Test Guild',
+        iconURL: () => 'https://cdn.example/icon.png',
+        memberCount: 42,
+        ownerId: '444',
+        description: 'A test guild',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        features: ['COMMUNITY'],
+        premiumTier: 2,
+        premiumSubscriptionCount: 5,
+        roles: { cache: [makeFakeRole()] },
+        channels: { cache: [makeFakeChannel()] },
+        emojis: { cache: [{ id: 'e1', name: 'wave', animated: false }] },
+        ...overrides,
+    };
+}
+
+function makeFakeMessage(overrides: Record<string, any> = {}): any {
+    return {
+        id: '555',
+        channelId: '222',
+        guildId: '333',
+        author: {
+            id: '666',
+            username: 'alice',
+            displayName: 'Alice',
+            bot: false,
+        },
+        content: 'hello world',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        editedAt: null,
+        attachments: [],
+        embeds: [],
+        reactions: { cache: [] },
+        reference: null,
+        pinned: false,
+        ...overrides,
+    };
+}
+
+function makeFakeMember(overrides: Record<string, any> = {}): any {
+    return {
+        id: '666',
+        user: {
+            username: 'alice',
+            displayName: 'Alice',
+            bot: false,
+        },
+        nickname: 'Alie',
+        displayAvatarURL: () => 'https://cdn.example/avatar.png',
+        roles: { cache: [makeFakeRole()] },
+        joinedAt: new Date('2024-01-01T00:00:00.000Z'),
+        presence: { status: 'online' },
+        ...overrides,
+    };
+}
+
+function makeFakeUser(overrides: Record<string, any> = {}): any {
+    return {
+        id: '666',
+        username: 'alice',
+        displayName: 'Alice',
+        avatarURL: () => 'https://cdn.example/avatar.png',
+        bot: false,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        bannerURL: () => 'https://cdn.example/banner.png',
+        ...overrides,
+    };
+}
+
+// ─── Tests ───────────────────────────────────────────────────────
+
+describe('mapChannelType', () => {
+    it('maps GuildText to TEXT', () => {
+        expect(mapChannelType(DjsChannelType.GuildText)).toBe(ChannelType.TEXT);
+    });
+
+    it('maps GuildVoice to VOICE', () => {
+        expect(mapChannelType(DjsChannelType.GuildVoice)).toBe(ChannelType.VOICE);
+    });
+
+    it('maps GuildCategory to CATEGORY', () => {
+        expect(mapChannelType(DjsChannelType.GuildCategory)).toBe(ChannelType.CATEGORY);
+    });
+
+    it('maps GuildAnnouncement to ANNOUNCEMENT', () => {
+        expect(mapChannelType(DjsChannelType.GuildAnnouncement)).toBe(ChannelType.ANNOUNCEMENT);
+    });
+
+    it('maps GuildStageVoice to STAGE', () => {
+        expect(mapChannelType(DjsChannelType.GuildStageVoice)).toBe(ChannelType.STAGE);
+    });
+
+    it('maps GuildForum to FORUM', () => {
+        expect(mapChannelType(DjsChannelType.GuildForum)).toBe(ChannelType.FORUM);
+    });
+
+    it('maps PublicThread, PrivateThread, AnnouncementThread to THREAD', () => {
+        expect(mapChannelType(DjsChannelType.PublicThread)).toBe(ChannelType.THREAD);
+        expect(mapChannelType(DjsChannelType.PrivateThread)).toBe(ChannelType.THREAD);
+        expect(mapChannelType(DjsChannelType.AnnouncementThread)).toBe(ChannelType.THREAD);
+    });
+
+    it('returns UNKNOWN for unrecognized types', () => {
+        expect(mapChannelType(9999 as any)).toBe(ChannelType.UNKNOWN);
+    });
+});
