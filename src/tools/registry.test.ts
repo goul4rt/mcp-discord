@@ -241,3 +241,143 @@ describe('channel tools', () => {
         expect(result).toEqual({ success: true, thread_id: CHANNEL });
     });
 });
+
+describe('message tools', () => {
+    const GUILD = '123456789012345678';
+    const CHANNEL = '234567890123456789';
+    const MESSAGE = '456789012345678901';
+    const AUTHOR = '567890123456789012';
+
+    it('send_message renames reply_to to replyToMessageId', async () => {
+        const tool = findTool('send_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { channel_id: CHANNEL, content: 'hi', reply_to: MESSAGE },
+            provider,
+        );
+        expect(provider.sendMessage).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            content: 'hi',
+            embeds: undefined,
+            replyToMessageId: MESSAGE,
+        });
+    });
+
+    it('send_message accepts embeds without content', async () => {
+        const tool = findTool('send_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { channel_id: CHANNEL, embeds: [{ title: 'hi' }] },
+            provider,
+        );
+        expect(provider.sendMessage).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            content: undefined,
+            embeds: [{ title: 'hi' }],
+            replyToMessageId: undefined,
+        });
+    });
+
+    it('read_messages defaults limit to 50', async () => {
+        const tool = findTool('read_messages');
+        const parsed = tool.schema.parse({ channel_id: CHANNEL });
+        expect(parsed.limit).toBe(50);
+
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL, limit: 50 }, provider);
+        expect(provider.readMessages).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            limit: 50,
+            before: undefined,
+            after: undefined,
+            around: undefined,
+        });
+    });
+
+    it('read_messages rejects limit greater than 100', () => {
+        const tool = findTool('read_messages');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, limit: 200 })).toThrow();
+    });
+
+    it('search_messages defaults limit to 25 and transforms fields', async () => {
+        const tool = findTool('search_messages');
+        const parsed = tool.schema.parse({ guild_id: GUILD });
+        expect(parsed.limit).toBe(25);
+
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                query: 'hello',
+                author_id: AUTHOR,
+                channel_id: CHANNEL,
+                limit: 10,
+            },
+            provider,
+        );
+        expect(provider.searchMessages).toHaveBeenCalledWith({
+            guildId: GUILD,
+            query: 'hello',
+            authorId: AUTHOR,
+            channelId: CHANNEL,
+            limit: 10,
+        });
+    });
+
+    it('edit_message calls provider.editMessage', async () => {
+        const tool = findTool('edit_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { channel_id: CHANNEL, message_id: MESSAGE, content: 'new' },
+            provider,
+        );
+        expect(provider.editMessage).toHaveBeenCalledWith(CHANNEL, MESSAGE, 'new', undefined);
+    });
+
+    it('delete_message returns success and passes reason', async () => {
+        const tool = findTool('delete_message');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { channel_id: CHANNEL, message_id: MESSAGE, reason: 'spam' },
+            provider,
+        );
+        expect(provider.deleteMessage).toHaveBeenCalledWith(CHANNEL, MESSAGE, 'spam');
+        expect(result).toEqual({ success: true });
+    });
+
+    it('delete_messages_bulk returns deleted_count from provider', async () => {
+        const tool = findTool('delete_messages_bulk');
+        const provider = makeStubProvider();
+        (provider.deleteMessagesBulk as ReturnType<typeof vi.fn>).mockResolvedValue(3);
+        const result = await tool.handler(
+            { channel_id: CHANNEL, message_ids: [MESSAGE, MESSAGE, MESSAGE] },
+            provider,
+        );
+        expect(result).toEqual({ success: true, deleted_count: 3 });
+    });
+
+    it('delete_messages_bulk schema rejects empty array', () => {
+        const tool = findTool('delete_messages_bulk');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, message_ids: [] })).toThrow();
+    });
+
+    it('delete_messages_bulk schema rejects more than 100 ids', () => {
+        const tool = findTool('delete_messages_bulk');
+        const ids = Array.from({ length: 101 }, (_, i) => String(i).padStart(18, '1'));
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, message_ids: ids })).toThrow();
+    });
+
+    it('pin_message and unpin_message delegate to provider and return success', async () => {
+        const pin = findTool('pin_message');
+        const unpin = findTool('unpin_message');
+        const provider = makeStubProvider();
+
+        const pinResult = await pin.handler({ channel_id: CHANNEL, message_id: MESSAGE }, provider);
+        expect(provider.pinMessage).toHaveBeenCalledWith(CHANNEL, MESSAGE);
+        expect(pinResult).toEqual({ success: true });
+
+        const unpinResult = await unpin.handler({ channel_id: CHANNEL, message_id: MESSAGE }, provider);
+        expect(provider.unpinMessage).toHaveBeenCalledWith(CHANNEL, MESSAGE);
+        expect(unpinResult).toEqual({ success: true });
+    });
+});
