@@ -27,7 +27,6 @@ import {
     type Role,
     type APIMessage,
     type GuildBasedChannel,
-    type GuildChannel,
     type ThreadChannel,
 } from 'discord.js';
 

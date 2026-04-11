@@ -10,7 +10,6 @@ import {
     ChannelType as DjsChannelType,
     type Guild,
     type GuildBasedChannel,
-    type GuildChannel,
     type GuildMember,
     type Message,
     type Role,
