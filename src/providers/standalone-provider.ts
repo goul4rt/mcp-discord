@@ -26,7 +26,7 @@ import {
     type Message,
     type Role,
     type APIMessage,
-    type GuildChannel,
+    type GuildBasedChannel,
     type ThreadChannel,
 } from 'discord.js';
 
@@ -211,7 +211,7 @@ export class StandaloneProvider implements DiscordProvider {
             const guild = await this.resolveGuild(guildId);
             const channels = await guild.channels.fetch();
             return channels
-                .filter((c): c is GuildChannel => c !== null)
+                .filter((c): c is NonNullable<typeof c> => c !== null)
                 .map(c => mapChannelSummary(c));
         }
         const channels = (await this.rest.get(Routes.guildChannels(guildId))) as any[];
@@ -230,7 +230,7 @@ export class StandaloneProvider implements DiscordProvider {
         if (this.client) {
             const channel = await this.client.channels.fetch(channelId);
             if (!channel) throw new Error(`Channel ${channelId} not found`);
-            return mapChannel(channel as GuildChannel);
+            return mapChannel(channel as unknown as GuildBasedChannel);
         }
         const c = (await this.rest.get(Routes.channel(channelId))) as any;
         return {
@@ -310,7 +310,7 @@ export class StandaloneProvider implements DiscordProvider {
                 position: options.position,
                 parent: options.parentId,
             });
-            return mapChannel(edited as GuildChannel);
+            return mapChannel(edited as unknown as GuildBasedChannel);
         }
         // REST fallback
         const body: any = {};
@@ -368,7 +368,7 @@ export class StandaloneProvider implements DiscordProvider {
                     reason: options.reason,
                 });
             }
-            return mapChannel(thread as unknown as GuildChannel);
+            return mapChannel(thread as unknown as GuildBasedChannel);
         }
         throw new Error('createThread requires gateway mode (set DISCORD_USE_GATEWAY=true). REST-only mode does not support thread creation.');
     }

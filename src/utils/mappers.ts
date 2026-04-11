@@ -9,7 +9,7 @@
 import {
     ChannelType as DjsChannelType,
     type Guild,
-    type GuildChannel,
+    type GuildBasedChannel,
     type GuildMember,
     type Message,
     type Role,
@@ -72,9 +72,7 @@ export function mapGuildDetailed(guild: Guild): DiscordGuildDetailed {
     return {
         ...mapGuild(guild),
         roles: guild.roles.cache.map(r => mapRole(r)),
-        channels: guild.channels.cache
-            .filter((c): c is GuildChannel => c !== null)
-            .map(c => mapChannelSummary(c)),
+        channels: guild.channels.cache.map(c => mapChannelSummary(c)),
         emojis: guild.emojis.cache.map(e => ({
             id: e.id ?? '',
             name: e.name ?? '',
@@ -87,19 +85,19 @@ export function mapGuildDetailed(guild: Guild): DiscordGuildDetailed {
 
 // ─── Channel ────────────────────────────────────────────────────
 
-export function mapChannelSummary(channel: GuildChannel): DiscordChannelSummary {
+export function mapChannelSummary(channel: GuildBasedChannel): DiscordChannelSummary {
     return {
         id: channel.id,
         name: channel.name,
         type: mapChannelType(channel.type),
         parentId: channel.parentId,
         parentName: channel.parent?.name ?? null,
-        position: channel.position,
+        position: 'position' in channel ? (channel as any).position : 0,
         topic: 'topic' in channel ? (channel as any).topic ?? null : null,
     };
 }
 
-export function mapChannel(channel: GuildChannel): DiscordChannel {
+export function mapChannel(channel: GuildBasedChannel): DiscordChannel {
     return {
         ...mapChannelSummary(channel),
         guildId: channel.guildId,
