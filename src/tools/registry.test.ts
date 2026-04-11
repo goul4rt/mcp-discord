@@ -381,3 +381,121 @@ describe('message tools', () => {
         expect(unpinResult).toEqual({ success: true });
     });
 });
+
+describe('reaction tools', () => {
+    const CHANNEL = '234567890123456789';
+    const MESSAGE = '456789012345678901';
+    const USER = '567890123456789012';
+
+    it('add_reaction returns success', async () => {
+        const tool = findTool('add_reaction');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { channel_id: CHANNEL, message_id: MESSAGE, emoji: '👍' },
+            provider,
+        );
+        expect(provider.addReaction).toHaveBeenCalledWith(CHANNEL, MESSAGE, '👍');
+        expect(result).toEqual({ success: true });
+    });
+
+    it('remove_reaction passes optional user_id', async () => {
+        const tool = findTool('remove_reaction');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { channel_id: CHANNEL, message_id: MESSAGE, emoji: '👍', user_id: USER },
+            provider,
+        );
+        expect(provider.removeReaction).toHaveBeenCalledWith(CHANNEL, MESSAGE, '👍', USER);
+        expect(result).toEqual({ success: true });
+    });
+});
+
+describe('member tools', () => {
+    const GUILD = '123456789012345678';
+    const USER = '567890123456789012';
+
+    it('list_members defaults limit to 100', async () => {
+        const tool = findTool('list_members');
+        const parsed = tool.schema.parse({ guild_id: GUILD });
+        expect(parsed.limit).toBe(100);
+
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, limit: 50 }, provider);
+        expect(provider.listMembers).toHaveBeenCalledWith(GUILD, 50, undefined);
+    });
+
+    it('get_member passes guild_id and user_id', async () => {
+        const tool = findTool('get_member');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, user_id: USER }, provider);
+        expect(provider.getMember).toHaveBeenCalledWith(GUILD, USER);
+    });
+
+    it('get_user passes user_id', async () => {
+        const tool = findTool('get_user');
+        const provider = makeStubProvider();
+        await tool.handler({ user_id: USER }, provider);
+        expect(provider.getUser).toHaveBeenCalledWith(USER);
+    });
+
+    it('search_members defaults limit to 20', async () => {
+        const tool = findTool('search_members');
+        const parsed = tool.schema.parse({ guild_id: GUILD, query: 'al' });
+        expect(parsed.limit).toBe(20);
+
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, query: 'al', limit: 5 }, provider);
+        expect(provider.searchMembers).toHaveBeenCalledWith(GUILD, 'al', 5);
+    });
+});
+
+describe('role tools', () => {
+    const GUILD = '123456789012345678';
+    const USER = '567890123456789012';
+    const ROLE = '678901234567890123';
+
+    it('list_roles calls provider.listRoles', async () => {
+        const tool = findTool('list_roles');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.listRoles).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('create_role transforms guild_id to guildId', async () => {
+        const tool = findTool('create_role');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { guild_id: GUILD, name: 'VIP', color: 0xff00ff, mentionable: true, hoist: true },
+            provider,
+        );
+        expect(provider.createRole).toHaveBeenCalledWith({
+            guildId: GUILD,
+            name: 'VIP',
+            color: 0xff00ff,
+            mentionable: true,
+            hoist: true,
+        });
+    });
+
+    it('add_role returns success and passes arguments', async () => {
+        const tool = findTool('add_role');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, user_id: USER, role_id: ROLE, reason: 'promo' },
+            provider,
+        );
+        expect(provider.addRole).toHaveBeenCalledWith(GUILD, USER, ROLE, 'promo');
+        expect(result).toEqual({ success: true });
+    });
+
+    it('remove_role returns success and passes arguments', async () => {
+        const tool = findTool('remove_role');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, user_id: USER, role_id: ROLE, reason: 'demo' },
+            provider,
+        );
+        expect(provider.removeRole).toHaveBeenCalledWith(GUILD, USER, ROLE, 'demo');
+        expect(result).toEqual({ success: true });
+    });
+});
