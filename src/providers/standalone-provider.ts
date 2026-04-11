@@ -36,6 +36,7 @@ import type {
     AuditLogEntry,
     BanOptions,
     CreateChannelOptions,
+    CreateInviteOptions,
     CreateRoleOptions,
     CreateThreadOptions,
     DiscordChannel,
@@ -48,6 +49,7 @@ import type {
     DiscordRole,
     DiscordUser,
     EditChannelOptions,
+    Invite,
     KickOptions,
     PaginatedResult,
     ReadMessagesOptions,
@@ -56,7 +58,8 @@ import type {
     TimeoutOptions,
     ChannelType,
 } from '../types/discord.js';
-import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage } from '../utils/mappers.js';
+import type { SendDMOptions } from './capabilities/dms.js';
+import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage, mapApiInvite } from '../utils/mappers.js';
 
 export class StandaloneProvider implements DiscordProvider {
     readonly name = 'standalone';
@@ -690,10 +693,61 @@ export class StandaloneProvider implements DiscordProvider {
     // Methods added by PR 3 (feat/forums).
 
     // ─── Invites ─────────────────────────────────────────────────
-    // Methods added by PR 4 (feat/invites-dms).
+
+    async listInvites(guildId: string): Promise<Invite[]> {
+        const invites = (await this.rest.get(Routes.guildInvites(guildId))) as any[];
+        return invites.map(i => mapApiInvite(i));
+    }
+
+    async listChannelInvites(channelId: string): Promise<Invite[]> {
+        const invites = (await this.rest.get(Routes.channelInvites(channelId))) as any[];
+        return invites.map(i => mapApiInvite(i));
+    }
+
+    async getInvite(code: string): Promise<Invite> {
+        const query = new URLSearchParams({ with_counts: 'true' });
+        const invite = (await this.rest.get(Routes.invite(code), { query })) as any;
+        return mapApiInvite(invite);
+    }
+
+    async createInvite(options: CreateInviteOptions): Promise<Invite> {
+        const body: any = {};
+        if (options.maxAge !== undefined) body.max_age = options.maxAge;
+        if (options.maxUses !== undefined) body.max_uses = options.maxUses;
+        if (options.temporary !== undefined) body.temporary = options.temporary;
+        if (options.unique !== undefined) body.unique = options.unique;
+
+        const invite = (await this.rest.post(Routes.channelInvites(options.channelId), { body })) as any;
+        return mapApiInvite(invite);
+    }
+
+    async deleteInvite(code: string, reason?: string): Promise<void> {
+        await this.rest.delete(Routes.invite(code), { reason });
+    }
 
     // ─── DMs ─────────────────────────────────────────────────────
-    // Methods added by PR 4 (feat/invites-dms).
+
+    async sendDM(options: SendDMOptions): Promise<DiscordMessage> {
+        if (this.client) {
+            const user = await this.client.users.fetch(options.userId);
+            const dm = await user.createDM();
+            const payload: any = {};
+            if (options.content) payload.content = options.content;
+            if (options.embeds) payload.embeds = options.embeds;
+            const msg = await dm.send(payload);
+            return mapMessage(msg);
+        }
+        const dmChannel = (await this.rest.post(Routes.userChannels(), {
+            body: { recipient_id: options.userId },
+        })) as { id: string };
+
+        const body: any = {};
+        if (options.content) body.content = options.content;
+        if (options.embeds) body.embeds = options.embeds;
+
+        const msg = (await this.rest.post(Routes.channelMessages(dmChannel.id), { body })) as APIMessage;
+        return mapApiMessage(msg);
+    }
 
     // ─── Scheduled Events ────────────────────────────────────────
     // Methods added by PR 5 (feat/scheduled-events).
