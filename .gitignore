@@ -28,3 +28,6 @@ coverage/
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Local design docs / plans (do not commit)
+docs/superpowers/
