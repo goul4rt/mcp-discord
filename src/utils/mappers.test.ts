@@ -233,3 +233,78 @@ describe('mapChannel', () => {
         expect(result.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
 });
+
+describe('mapMessage', () => {
+    it('maps basic message fields', () => {
+        const result = mapMessage(makeFakeMessage());
+        expect(result.id).toBe('555');
+        expect(result.channelId).toBe('222');
+        expect(result.guildId).toBe('333');
+        expect(result.content).toBe('hello world');
+        expect(result.timestamp).toBe('2024-01-01T00:00:00.000Z');
+        expect(result.editedTimestamp).toBeNull();
+        expect(result.pinned).toBe(false);
+        expect(result.replyTo).toBeNull();
+    });
+
+    it('flattens the author object', () => {
+        const result = mapMessage(makeFakeMessage());
+        expect(result.author).toEqual({
+            id: '666',
+            username: 'alice',
+            displayName: 'Alice',
+            bot: false,
+        });
+    });
+
+    it('maps attachments', () => {
+        const message = makeFakeMessage({
+            attachments: [{ url: 'https://cdn/a.png', name: 'a.png', size: 1024 }],
+        });
+        const result = mapMessage(message);
+        expect(result.attachments).toEqual([
+            { url: 'https://cdn/a.png', name: 'a.png', size: 1024 },
+        ]);
+    });
+
+    it('maps embeds including nested footer, thumbnail, image, author, fields', () => {
+        const message = makeFakeMessage({
+            embeds: [{
+                title: 'title',
+                description: 'desc',
+                url: 'https://example.com',
+                color: 0xff0000,
+                fields: [{ name: 'f1', value: 'v1', inline: true }],
+                footer: { text: 'footer', iconURL: 'https://cdn/f.png' },
+                thumbnail: { url: 'https://cdn/t.png' },
+                image: { url: 'https://cdn/i.png' },
+                author: { name: 'author', url: 'https://example.com/author', iconURL: 'https://cdn/auth.png' },
+                timestamp: '2024-01-01T00:00:00.000Z',
+            }],
+        });
+        const result = mapMessage(message);
+        expect(result.embeds).toHaveLength(1);
+        expect(result.embeds[0].title).toBe('title');
+        expect(result.embeds[0].footer).toEqual({ text: 'footer', iconUrl: 'https://cdn/f.png' });
+        expect(result.embeds[0].thumbnail).toEqual({ url: 'https://cdn/t.png' });
+        expect(result.embeds[0].image).toEqual({ url: 'https://cdn/i.png' });
+        expect(result.embeds[0].author?.iconUrl).toBe('https://cdn/auth.png');
+        expect(result.embeds[0].fields).toEqual([{ name: 'f1', value: 'v1', inline: true }]);
+    });
+
+    it('maps reactions from reactions.cache', () => {
+        const message = makeFakeMessage({
+            reactions: {
+                cache: [{ emoji: { toString: () => '👍' }, count: 3, me: true }],
+            },
+        });
+        const result = mapMessage(message);
+        expect(result.reactions).toEqual([{ emoji: '👍', count: 3, me: true }]);
+    });
+
+    it('uses reference.messageId for replyTo', () => {
+        const message = makeFakeMessage({ reference: { messageId: '999' } });
+        const result = mapMessage(message);
+        expect(result.replyTo).toBe('999');
+    });
+});
