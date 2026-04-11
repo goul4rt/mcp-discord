@@ -50,9 +50,11 @@ import type {
     SearchMessagesOptions,
     SendMessageOptions,
     TimeoutOptions,
+    UpdateWelcomeScreenOptions,
+    WelcomeScreen,
 } from '../types/discord.js';
 import type { SendDMOptions } from './capabilities/dms.js';
-import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapInvite, mapMember, mapMessage, mapRole, mapUser } from '../utils/mappers.js';
+import { mapApiWelcomeScreen, mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapInvite, mapMember, mapMessage, mapRole, mapUser, mapWelcomeScreen } from '../utils/mappers.js';
 
 export class IntegratedProvider implements DiscordProvider {
     readonly name = 'integrated';
@@ -468,5 +470,26 @@ export class IntegratedProvider implements DiscordProvider {
     // Methods added by PR 5 (feat/scheduled-events).
 
     // ─── Screening ───────────────────────────────────────────────
-    // Methods added by PR 6b (feat/screening).
+
+    async getWelcomeScreen(guildId: string): Promise<WelcomeScreen> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const screen = await guild.fetchWelcomeScreen();
+        return mapWelcomeScreen(screen);
+    }
+
+    async updateWelcomeScreen(options: UpdateWelcomeScreenOptions): Promise<WelcomeScreen> {
+        const body: any = {};
+        if (options.enabled !== undefined) body.enabled = options.enabled;
+        if (options.description !== undefined) body.description = options.description;
+        if (options.welcomeChannels !== undefined) {
+            body.welcome_channels = options.welcomeChannels.map(wc => ({
+                channel_id: wc.channelId,
+                description: wc.description,
+                emoji_name: wc.emojiName ?? null,
+                emoji_id: wc.emojiId ?? null,
+            }));
+        }
+        const raw = await this.client.rest.patch(`/guilds/${options.guildId}/welcome-screen`, { body });
+        return mapApiWelcomeScreen(raw);
+    }
 }
