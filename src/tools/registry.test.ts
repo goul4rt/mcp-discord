@@ -118,3 +118,126 @@ describe('server tools', () => {
         expect(() => tool.schema.parse({})).toThrow();
     });
 });
+
+describe('channel tools', () => {
+    const GUILD = '123456789012345678';
+    const CHANNEL = '234567890123456789';
+    const PARENT = '345678901234567890';
+    const MESSAGE = '456789012345678901';
+
+    it('get_channels calls provider.getChannels', async () => {
+        const tool = findTool('get_channels');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.getChannels).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('get_channel calls provider.getChannel', async () => {
+        const tool = findTool('get_channel');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.getChannel).toHaveBeenCalledWith(CHANNEL);
+    });
+
+    it('create_channel defaults type to text and transforms snake_case to camelCase', async () => {
+        const tool = findTool('create_channel');
+        const parsed = tool.schema.parse({ guild_id: GUILD, name: 'general' });
+        expect(parsed.type).toBe('text');
+
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                name: 'general',
+                type: 'text',
+                topic: 'hello',
+                parent_id: PARENT,
+                nsfw: true,
+                rate_limit_per_user: 5,
+            },
+            provider,
+        );
+        expect(provider.createChannel).toHaveBeenCalledWith({
+            guildId: GUILD,
+            name: 'general',
+            type: 'text',
+            topic: 'hello',
+            parentId: PARENT,
+            nsfw: true,
+            rateLimitPerUser: 5,
+        });
+    });
+
+    it('create_channel schema rejects invalid type', () => {
+        const tool = findTool('create_channel');
+        expect(() => tool.schema.parse({ guild_id: GUILD, name: 'x', type: 'bogus' })).toThrow();
+    });
+
+    it('edit_channel transforms snake_case to camelCase and passes null parent', async () => {
+        const tool = findTool('edit_channel');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                channel_id: CHANNEL,
+                name: 'renamed',
+                topic: 'new',
+                nsfw: false,
+                rate_limit_per_user: 10,
+                position: 2,
+                parent_id: null,
+            },
+            provider,
+        );
+        expect(provider.editChannel).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            name: 'renamed',
+            topic: 'new',
+            nsfw: false,
+            rateLimitPerUser: 10,
+            position: 2,
+            parentId: null,
+        });
+    });
+
+    it('delete_channel returns success payload and calls provider.deleteChannel', async () => {
+        const tool = findTool('delete_channel');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ channel_id: CHANNEL, reason: 'cleanup' }, provider);
+        expect(provider.deleteChannel).toHaveBeenCalledWith(CHANNEL, 'cleanup');
+        expect(result).toEqual({ success: true, channel_id: CHANNEL });
+    });
+
+    it('create_thread converts auto_archive_duration string to number', async () => {
+        const tool = findTool('create_thread');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                channel_id: CHANNEL,
+                name: 'thread',
+                message_id: MESSAGE,
+                auto_archive_duration: '1440',
+            },
+            provider,
+        );
+        expect(provider.createThread).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            name: 'thread',
+            messageId: MESSAGE,
+            autoArchiveDuration: 1440,
+            reason: undefined,
+        });
+    });
+
+    it('create_thread schema rejects an invalid auto_archive_duration value', () => {
+        const tool = findTool('create_thread');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, name: 'x', auto_archive_duration: '99' })).toThrow();
+    });
+
+    it('archive_thread returns success payload and calls provider.archiveThread', async () => {
+        const tool = findTool('archive_thread');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ thread_id: CHANNEL }, provider);
+        expect(provider.archiveThread).toHaveBeenCalledWith(CHANNEL);
+        expect(result).toEqual({ success: true, thread_id: CHANNEL });
+    });
+});
