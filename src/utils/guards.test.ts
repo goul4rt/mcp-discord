@@ -26,3 +26,20 @@ describe('isTextBasedChannel', () => {
         expect(isTextBasedChannel(channel)).toBe(false);
     });
 });
+
+describe('isGuildChannel', () => {
+    it('returns true when channel has guild and guildId properties', () => {
+        const channel = { guild: {}, guildId: '123456789012345678' };
+        expect(isGuildChannel(channel)).toBe(true);
+    });
+
+    it('returns false when channel is missing guild', () => {
+        const channel = { guildId: '123456789012345678' };
+        expect(isGuildChannel(channel)).toBe(false);
+    });
+
+    it('returns false when channel is missing guildId', () => {
+        const channel = { guild: {} };
+        expect(isGuildChannel(channel)).toBe(false);
+    });
+});
