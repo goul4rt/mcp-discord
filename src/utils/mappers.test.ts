@@ -157,3 +157,38 @@ describe('mapChannelType', () => {
         expect(mapChannelType(9999 as any)).toBe(ChannelType.UNKNOWN);
     });
 });
+
+describe('mapGuild', () => {
+    it('extracts id, name, icon, memberCount, ownerId, description, createdAt, features', () => {
+        const result = mapGuild(makeFakeGuild());
+        expect(result).toEqual({
+            id: '333',
+            name: 'Test Guild',
+            icon: 'https://cdn.example/icon.png',
+            memberCount: 42,
+            ownerId: '444',
+            description: 'A test guild',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            features: ['COMMUNITY'],
+        });
+    });
+});
+
+describe('mapGuildDetailed', () => {
+    it('extends mapGuild with roles, channels, emojis, boostLevel, boostCount', () => {
+        const result = mapGuildDetailed(makeFakeGuild());
+        expect(result.id).toBe('333');
+        expect(result.boostLevel).toBe(2);
+        expect(result.boostCount).toBe(5);
+        expect(result.roles).toHaveLength(1);
+        expect(result.roles[0].id).toBe('111');
+        expect(result.channels).toHaveLength(1);
+        expect(result.channels[0].id).toBe('222');
+        expect(result.emojis).toEqual([{ id: 'e1', name: 'wave', animated: false }]);
+    });
+
+    it('defaults boostCount to 0 when premiumSubscriptionCount is null', () => {
+        const result = mapGuildDetailed(makeFakeGuild({ premiumSubscriptionCount: null }));
+        expect(result.boostCount).toBe(0);
+    });
+});
