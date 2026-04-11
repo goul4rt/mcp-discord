@@ -39,7 +39,7 @@ export const ProviderDefaults = {
      * Both providers can delegate to this when using REST-based search.
      */
     async searchMessagesViaRest(
-        restGet: (path: string, options?: any) => Promise<unknown>,
+        restGet: (path: `/${string}`, options?: any) => Promise<unknown>,
         options: SearchMessagesOptions
     ): Promise<PaginatedResult<DiscordMessage>> {
         const query = new URLSearchParams();
