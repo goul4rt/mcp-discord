@@ -97,3 +97,24 @@ describe('tool registry', () => {
         expect(new Set(names).size).toBe(names.length);
     });
 });
+
+describe('server tools', () => {
+    it('list_servers calls provider.listGuilds with no arguments', async () => {
+        const tool = findTool('list_servers');
+        const provider = makeStubProvider();
+        await tool.handler({}, provider);
+        expect(provider.listGuilds).toHaveBeenCalledTimes(1);
+    });
+
+    it('get_server_info calls provider.getGuild with the guild_id', async () => {
+        const tool = findTool('get_server_info');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: '123456789012345678' }, provider);
+        expect(provider.getGuild).toHaveBeenCalledWith('123456789012345678');
+    });
+
+    it('get_server_info schema rejects missing guild_id', () => {
+        const tool = findTool('get_server_info');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+});
