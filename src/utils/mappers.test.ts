@@ -192,3 +192,44 @@ describe('mapGuildDetailed', () => {
         expect(result.boostCount).toBe(0);
     });
 });
+
+describe('mapChannelSummary', () => {
+    it('extracts id, name, type, parentId, parentName, position, topic', () => {
+        const channel = makeFakeChannel({
+            parentId: '777',
+            parent: { name: 'Category Name' },
+        });
+        const result = mapChannelSummary(channel);
+        expect(result).toEqual({
+            id: '222',
+            name: 'general',
+            type: ChannelType.TEXT,
+            parentId: '777',
+            parentName: 'Category Name',
+            position: 0,
+            topic: 'hello',
+        });
+    });
+
+    it('returns null topic when channel has no topic property', () => {
+        const channel = makeFakeChannel();
+        delete channel.topic;
+        const result = mapChannelSummary(channel);
+        expect(result.topic).toBeNull();
+    });
+});
+
+describe('mapChannel', () => {
+    it('extends mapChannelSummary with guildId, nsfw, rateLimitPerUser, createdAt', () => {
+        const result = mapChannel(makeFakeChannel());
+        expect(result.guildId).toBe('333');
+        expect(result.nsfw).toBe(false);
+        expect(result.rateLimitPerUser).toBe(0);
+        expect(result.createdAt).toBe('2024-01-01T00:00:00.000Z');
+    });
+
+    it('falls back to current date when createdAt is null', () => {
+        const result = mapChannel(makeFakeChannel({ createdAt: null }));
+        expect(result.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    });
+});
