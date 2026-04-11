@@ -12,11 +12,7 @@
 
 import { z } from 'zod';
 import type { DiscordProvider } from '../providers/discord-provider.js';
-
-// ─── Discord Snowflake ID Schema (reused) ──────────────────────
-
-/** Discord snowflake ID: 17-20 digit numeric string */
-const snowflakeId = z.string().regex(/^\d{17,20}$/, 'Must be a valid Discord snowflake ID (17-20 digits)');
+import { snowflakeId, embedSchema } from './schemas.js';
 
 // ─── Tool Definition Type ───────────────────────────────────────
 
@@ -26,27 +22,6 @@ export interface ToolDefinition {
     schema: z.ZodType<any>;
     handler: (input: any, provider: DiscordProvider) => Promise<any>;
 }
-
-// ─── Embed Schema (reused) ──────────────────────────────────────
-
-const embedFieldSchema = z.object({
-    name: z.string(),
-    value: z.string(),
-    inline: z.boolean().optional(),
-});
-
-const embedSchema = z.object({
-    title: z.string().optional(),
-    description: z.string().optional(),
-    url: z.string().optional(),
-    color: z.number().optional(),
-    fields: z.array(embedFieldSchema).optional(),
-    footer: z.object({ text: z.string(), iconUrl: z.string().optional() }).optional(),
-    thumbnail: z.object({ url: z.string() }).optional(),
-    image: z.object({ url: z.string() }).optional(),
-    author: z.object({ name: z.string(), url: z.string().optional(), iconUrl: z.string().optional() }).optional(),
-    timestamp: z.string().optional(),
-});
 
 // ═════════════════════════════════════════════════════════════════
 // SERVER / GUILD TOOLS
@@ -534,6 +509,48 @@ const monitoringTools: ToolDefinition[] = [
 ];
 
 // ═════════════════════════════════════════════════════════════════
+// PERMISSION TOOLS — populated by PR 1 (feat/permissions)
+// ═════════════════════════════════════════════════════════════════
+
+const permissionTools: ToolDefinition[] = [];
+
+// ═════════════════════════════════════════════════════════════════
+// WEBHOOK TOOLS — populated by PR 2 (feat/webhooks)
+// ═════════════════════════════════════════════════════════════════
+
+const webhookTools: ToolDefinition[] = [];
+
+// ═════════════════════════════════════════════════════════════════
+// FORUM TOOLS — populated by PR 3 (feat/forums)
+// ═════════════════════════════════════════════════════════════════
+
+const forumTools: ToolDefinition[] = [];
+
+// ═════════════════════════════════════════════════════════════════
+// INVITE TOOLS — populated by PR 4 (feat/invites-dms)
+// ═════════════════════════════════════════════════════════════════
+
+const inviteTools: ToolDefinition[] = [];
+
+// ═════════════════════════════════════════════════════════════════
+// DM TOOLS — populated by PR 4 (feat/invites-dms)
+// ═════════════════════════════════════════════════════════════════
+
+const dmTools: ToolDefinition[] = [];
+
+// ═════════════════════════════════════════════════════════════════
+// SCHEDULED EVENT TOOLS — populated by PR 5 (feat/scheduled-events)
+// ═════════════════════════════════════════════════════════════════
+
+const scheduledEventTools: ToolDefinition[] = [];
+
+// ═════════════════════════════════════════════════════════════════
+// SCREENING TOOLS — populated by PR 6b (feat/screening)
+// ═════════════════════════════════════════════════════════════════
+
+const screeningTools: ToolDefinition[] = [];
+
+// ═════════════════════════════════════════════════════════════════
 // ALL TOOLS — flat registry
 // ═════════════════════════════════════════════════════════════════
 
@@ -546,6 +563,13 @@ export const allTools: ToolDefinition[] = [
     ...roleTools,
     ...moderationTools,
     ...monitoringTools,
+    ...permissionTools,
+    ...webhookTools,
+    ...forumTools,
+    ...inviteTools,
+    ...dmTools,
+    ...scheduledEventTools,
+    ...screeningTools,
 ];
 
 export const toolsByName = new Map<string, ToolDefinition>(

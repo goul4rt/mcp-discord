@@ -2,6 +2,21 @@
 import { describe, it, expect, vi } from 'vitest';
 import { allTools, toolsByName, type ToolDefinition } from './registry.js';
 import type { DiscordProvider } from '../providers/discord-provider.js';
+import { makeServerStubs } from './__test_helpers__/stubs/server.js';
+import { makeChannelStubs } from './__test_helpers__/stubs/channels.js';
+import { makeMessageStubs } from './__test_helpers__/stubs/messages.js';
+import { makeReactionStubs } from './__test_helpers__/stubs/reactions.js';
+import { makeMemberStubs } from './__test_helpers__/stubs/members.js';
+import { makeRoleStubs } from './__test_helpers__/stubs/roles.js';
+import { makeModerationStubs } from './__test_helpers__/stubs/moderation.js';
+import { makeMonitoringStubs } from './__test_helpers__/stubs/monitoring.js';
+import { makePermissionStubs } from './__test_helpers__/stubs/permissions.js';
+import { makeWebhookStubs } from './__test_helpers__/stubs/webhooks.js';
+import { makeForumStubs } from './__test_helpers__/stubs/forums.js';
+import { makeInviteStubs } from './__test_helpers__/stubs/invites.js';
+import { makeDMStubs } from './__test_helpers__/stubs/dms.js';
+import { makeScheduledEventStubs } from './__test_helpers__/stubs/scheduledEvents.js';
+import { makeScreeningStubs } from './__test_helpers__/stubs/screening.js';
 
 // ─── Stub provider ──────────────────────────────────────────────
 
@@ -12,48 +27,21 @@ function makeStubProvider(): DiscordProvider {
         disconnect: vi.fn().mockResolvedValue(undefined),
         isReady: vi.fn().mockReturnValue(true),
         getBotUserId: vi.fn().mockReturnValue('1000'),
-
-        listGuilds: vi.fn().mockResolvedValue([]),
-        getGuild: vi.fn().mockResolvedValue({}),
-
-        getChannels: vi.fn().mockResolvedValue([]),
-        getChannel: vi.fn().mockResolvedValue({}),
-        createChannel: vi.fn().mockResolvedValue({ id: 'ch1' }),
-        editChannel: vi.fn().mockResolvedValue({ id: 'ch1' }),
-        deleteChannel: vi.fn().mockResolvedValue(undefined),
-
-        createThread: vi.fn().mockResolvedValue({ id: 'th1' }),
-        archiveThread: vi.fn().mockResolvedValue(undefined),
-
-        sendMessage: vi.fn().mockResolvedValue({ id: 'm1' }),
-        readMessages: vi.fn().mockResolvedValue({ items: [], hasMore: false }),
-        editMessage: vi.fn().mockResolvedValue({ id: 'm1' }),
-        deleteMessage: vi.fn().mockResolvedValue(undefined),
-        deleteMessagesBulk: vi.fn().mockResolvedValue(2),
-        pinMessage: vi.fn().mockResolvedValue(undefined),
-        unpinMessage: vi.fn().mockResolvedValue(undefined),
-        searchMessages: vi.fn().mockResolvedValue({ items: [], hasMore: false }),
-
-        addReaction: vi.fn().mockResolvedValue(undefined),
-        removeReaction: vi.fn().mockResolvedValue(undefined),
-
-        listMembers: vi.fn().mockResolvedValue({ items: [], hasMore: false }),
-        getMember: vi.fn().mockResolvedValue({}),
-        getUser: vi.fn().mockResolvedValue({}),
-        searchMembers: vi.fn().mockResolvedValue([]),
-
-        listRoles: vi.fn().mockResolvedValue([]),
-        createRole: vi.fn().mockResolvedValue({ id: 'r1' }),
-        addRole: vi.fn().mockResolvedValue(undefined),
-        removeRole: vi.fn().mockResolvedValue(undefined),
-
-        timeoutUser: vi.fn().mockResolvedValue(undefined),
-        kickUser: vi.fn().mockResolvedValue(undefined),
-        banUser: vi.fn().mockResolvedValue(undefined),
-        unbanUser: vi.fn().mockResolvedValue(undefined),
-
-        getAuditLog: vi.fn().mockResolvedValue([]),
-        checkMentions: vi.fn().mockResolvedValue([]),
+        ...makeServerStubs(),
+        ...makeChannelStubs(),
+        ...makeMessageStubs(),
+        ...makeReactionStubs(),
+        ...makeMemberStubs(),
+        ...makeRoleStubs(),
+        ...makeModerationStubs(),
+        ...makeMonitoringStubs(),
+        ...makePermissionStubs(),
+        ...makeWebhookStubs(),
+        ...makeForumStubs(),
+        ...makeInviteStubs(),
+        ...makeDMStubs(),
+        ...makeScheduledEventStubs(),
+        ...makeScreeningStubs(),
     };
 }
 

@@ -679,5 +679,26 @@ export class StandaloneProvider implements DiscordProvider {
     async checkMentions(guildId: string, userId?: string, limit = 25): Promise<DiscordMessage[]> {
         return ProviderDefaults.checkMentions(this, guildId, userId, limit);
     }
+
+    // ─── Permissions ─────────────────────────────────────────────
+    // Methods added by PR 1 (feat/permissions).
+
+    // ─── Webhooks ────────────────────────────────────────────────
+    // Methods added by PR 2 (feat/webhooks).
+
+    // ─── Forums ──────────────────────────────────────────────────
+    // Methods added by PR 3 (feat/forums).
+
+    // ─── Invites ─────────────────────────────────────────────────
+    // Methods added by PR 4 (feat/invites-dms).
+
+    // ─── DMs ─────────────────────────────────────────────────────
+    // Methods added by PR 4 (feat/invites-dms).
+
+    // ─── Scheduled Events ────────────────────────────────────────
+    // Methods added by PR 5 (feat/scheduled-events).
+
+    // ─── Screening ───────────────────────────────────────────────
+    // Methods added by PR 6b (feat/screening).
 }
 
