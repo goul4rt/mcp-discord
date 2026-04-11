@@ -308,3 +308,69 @@ describe('mapMessage', () => {
         expect(result.replyTo).toBe('999');
     });
 });
+
+describe('mapMember', () => {
+    it('extracts user identity fields and roles', () => {
+        const result = mapMember(makeFakeMember());
+        expect(result.userId).toBe('666');
+        expect(result.username).toBe('alice');
+        expect(result.displayName).toBe('Alice');
+        expect(result.nickname).toBe('Alie');
+        expect(result.avatar).toBe('https://cdn.example/avatar.png');
+        expect(result.roles).toHaveLength(1);
+        expect(result.roles[0]).toEqual({ id: '111', name: 'Admin', color: 0xff0000 });
+        expect(result.joinedAt).toBe('2024-01-01T00:00:00.000Z');
+        expect(result.bot).toBe(false);
+    });
+
+    it('uses presence.status when available', () => {
+        const result = mapMember(makeFakeMember());
+        expect(result.status).toBe('online');
+    });
+
+    it('defaults status to offline when presence is missing', () => {
+        const result = mapMember(makeFakeMember({ presence: null }));
+        expect(result.status).toBe('offline');
+    });
+
+    it('returns empty string joinedAt when joinedAt is null', () => {
+        const result = mapMember(makeFakeMember({ joinedAt: null }));
+        expect(result.joinedAt).toBe('');
+    });
+});
+
+describe('mapUser', () => {
+    it('extracts id, username, displayName, avatar, bot, createdAt, banner', () => {
+        const result = mapUser(makeFakeUser());
+        expect(result).toEqual({
+            id: '666',
+            username: 'alice',
+            displayName: 'Alice',
+            avatar: 'https://cdn.example/avatar.png',
+            bot: false,
+            createdAt: '2024-01-01T00:00:00.000Z',
+            banner: 'https://cdn.example/banner.png',
+        });
+    });
+
+    it('defaults banner to null when bannerURL returns null', () => {
+        const result = mapUser(makeFakeUser({ bannerURL: () => null }));
+        expect(result.banner).toBeNull();
+    });
+});
+
+describe('mapRole', () => {
+    it('extracts id, name, color, position, permissions, mentionable, managed, memberCount', () => {
+        const result = mapRole(makeFakeRole());
+        expect(result).toEqual({
+            id: '111',
+            name: 'Admin',
+            color: 0xff0000,
+            position: 1,
+            permissions: '8',
+            mentionable: true,
+            managed: false,
+            memberCount: 3,
+        });
+    });
+});
