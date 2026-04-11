@@ -20,7 +20,7 @@
  *   // then expose `server` via stdio or HTTP
  */
 
-import type { Client, FetchMessagesOptions, GuildChannel, GuildMember, TextChannel, Role, ThreadChannel, User } from 'discord.js';
+import type { Client, FetchMessagesOptions, GuildBasedChannel, GuildChannel, GuildMember, TextChannel, Role, ThreadChannel, User } from 'discord.js';
 import { ChannelType as DjsChannelType } from 'discord.js';
 
 import type { DiscordProvider, IntegratedProviderConfig } from './discord-provider.js';
@@ -108,14 +108,14 @@ export class IntegratedProvider implements DiscordProvider {
         const guild = await this.client.guilds.fetch(guildId);
         const channels = await guild.channels.fetch();
         return channels
-            .filter((c): c is GuildChannel => c !== null)
+            .filter((c): c is NonNullable<typeof c> => c !== null)
             .map(c => mapChannelSummary(c));
     }
 
     async getChannel(channelId: string): Promise<DiscordChannel> {
         const channel = await this.client.channels.fetch(channelId);
         assertGuildChannel(channel, channelId);
-        return mapChannel(channel as GuildChannel);
+        return mapChannel(channel as unknown as GuildBasedChannel);
     }
 
     async createChannel(options: CreateChannelOptions): Promise<DiscordChannel> {
@@ -150,7 +150,7 @@ export class IntegratedProvider implements DiscordProvider {
             position: options.position,
             parent: options.parentId,
         });
-        return mapChannel(edited);
+        return mapChannel(edited as unknown as GuildBasedChannel);
     }
 
     async deleteChannel(channelId: string, reason?: string): Promise<void> {
@@ -181,7 +181,7 @@ export class IntegratedProvider implements DiscordProvider {
                 reason: options.reason,
             });
         }
-        return mapChannel(thread as unknown as GuildChannel);
+        return mapChannel(thread as unknown as GuildBasedChannel);
     }
 
     async archiveThread(threadId: string): Promise<void> {
