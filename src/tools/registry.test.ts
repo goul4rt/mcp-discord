@@ -76,8 +76,8 @@ describe('snowflake ID schema', () => {
 });
 
 describe('tool registry', () => {
-    it('exposes all 33 tools via allTools', () => {
-        expect(allTools).toHaveLength(33);
+    it('exposes all 39 tools via allTools', () => {
+        expect(allTools).toHaveLength(39);
     });
 
     it('has a unique name per tool', () => {
@@ -609,5 +609,121 @@ describe('monitoring tools', () => {
         const provider = makeStubProvider();
         await tool.handler({ guild_id: GUILD, user_id: USER, limit: 10 }, provider);
         expect(provider.checkMentions).toHaveBeenCalledWith(GUILD, USER, 10);
+    });
+});
+
+describe('invite tools', () => {
+    const GUILD = '123456789012345678';
+    const CHANNEL = '234567890123456789';
+    const CODE = 'abc123';
+
+    it('list_invites calls provider.listInvites with the guild_id', async () => {
+        const tool = findTool('list_invites');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.listInvites).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('list_invites schema rejects missing guild_id', () => {
+        const tool = findTool('list_invites');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('list_channel_invites calls provider.listChannelInvites with the channel_id', async () => {
+        const tool = findTool('list_channel_invites');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.listChannelInvites).toHaveBeenCalledWith(CHANNEL);
+    });
+
+    it('get_invite calls provider.getInvite with the code', async () => {
+        const tool = findTool('get_invite');
+        const provider = makeStubProvider();
+        await tool.handler({ code: CODE }, provider);
+        expect(provider.getInvite).toHaveBeenCalledWith(CODE);
+    });
+
+    it('get_invite schema rejects missing code', () => {
+        const tool = findTool('get_invite');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('create_invite transforms snake_case to camelCase', async () => {
+        const tool = findTool('create_invite');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                channel_id: CHANNEL,
+                max_uses: 10,
+                max_age: 3600,
+                temporary: true,
+                unique: false,
+            },
+            provider,
+        );
+        expect(provider.createInvite).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            maxUses: 10,
+            maxAge: 3600,
+            temporary: true,
+            unique: false,
+        });
+    });
+
+    it('create_invite accepts only channel_id', async () => {
+        const tool = findTool('create_invite');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.createInvite).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            maxUses: undefined,
+            maxAge: undefined,
+            temporary: undefined,
+            unique: undefined,
+        });
+    });
+
+    it('create_invite schema rejects non-number max_uses', () => {
+        const tool = findTool('create_invite');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, max_uses: 'lots' })).toThrow();
+    });
+
+    it('delete_invite returns success payload and passes reason', async () => {
+        const tool = findTool('delete_invite');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ code: CODE, reason: 'revoked' }, provider);
+        expect(provider.deleteInvite).toHaveBeenCalledWith(CODE, 'revoked');
+        expect(result).toEqual({ success: true, code: CODE });
+    });
+});
+
+describe('dm tools', () => {
+    const USER = '567890123456789012';
+
+    it('send_dm calls provider.sendDM with camelCase fields', async () => {
+        const tool = findTool('send_dm');
+        const provider = makeStubProvider();
+        await tool.handler({ user_id: USER, content: 'hi' }, provider);
+        expect(provider.sendDM).toHaveBeenCalledWith({
+            userId: USER,
+            content: 'hi',
+            embeds: undefined,
+        });
+    });
+
+    it('send_dm accepts embeds without content', async () => {
+        const tool = findTool('send_dm');
+        const provider = makeStubProvider();
+        await tool.handler({ user_id: USER, embeds: [{ title: 'hi' }] }, provider);
+        expect(provider.sendDM).toHaveBeenCalledWith({
+            userId: USER,
+            content: undefined,
+            embeds: [{ title: 'hi' }],
+        });
+    });
+
+    it('send_dm schema rejects missing user_id', () => {
+        const tool = findTool('send_dm');
+        expect(() => tool.schema.parse({ content: 'hi' })).toThrow();
     });
 });
