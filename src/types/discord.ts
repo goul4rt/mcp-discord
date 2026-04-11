@@ -256,6 +256,29 @@ export interface CreateInviteOptions {
     unique?: boolean;
 }
 
+// ─── Scheduled Events ───────────────────────────────────────────
+
+export type EventStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELED';
+export type EventEntityType = 'STAGE_INSTANCE' | 'VOICE' | 'EXTERNAL';
+
+export interface ScheduledEvent {
+    id: string;
+    guildId: string;
+    channelId: string | null;
+    creatorId: string | null;
+    name: string;
+    description: string | null;
+    scheduledStartTime: string;
+    scheduledEndTime: string | null;
+    privacyLevel: 'GUILD_ONLY';
+    status: EventStatus;
+    entityType: EventEntityType;
+    entityId: string | null;
+    location: string | null;
+    userCount: number;
+    image: string | null;
+}
+
 // ─── Pagination ─────────────────────────────────────────────────
 
 export interface PaginatedResult<T> {
