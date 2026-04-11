@@ -8,16 +8,19 @@
 
 import {
     ChannelType as DjsChannelType,
+    PermissionFlagsBits,
     type Guild,
     type GuildBasedChannel,
     type GuildMember,
     type Message,
+    type PermissionOverwrites,
     type Role,
     type User,
 } from 'discord.js';
 
 import {
     ChannelType,
+    OverwriteType,
     type DiscordChannel,
     type DiscordChannelSummary,
     type DiscordGuild,
@@ -26,6 +29,7 @@ import {
     type DiscordMessage,
     type DiscordRole,
     type DiscordUser,
+    type PermissionOverwrite,
 } from '../types/discord.js';
 
 // ─── Channel Type Mapping ───────────────────────────────────────
@@ -245,5 +249,106 @@ export function mapApiMessage(msg: any, fallbackGuildId?: string): DiscordMessag
         })),
         replyTo: msg.message_reference?.message_id ?? null,
         pinned: msg.pinned ?? false,
+    };
+}
+
+// ─── Channel Permissions ────────────────────────────────────────
+
+// Discord API exposes permissions as SCREAMING_SNAKE_CASE in the MCP schema
+// but discord.js uses PascalCase keys on PermissionFlagsBits. We keep an
+// explicit lookup so irregular names (SendTTSMessages, UseVAD) round-trip
+// correctly without ad-hoc string conversion.
+const PERMISSION_NAME_TO_BIT: Record<string, bigint> = {
+    CREATE_INSTANT_INVITE: PermissionFlagsBits.CreateInstantInvite,
+    KICK_MEMBERS: PermissionFlagsBits.KickMembers,
+    BAN_MEMBERS: PermissionFlagsBits.BanMembers,
+    ADMINISTRATOR: PermissionFlagsBits.Administrator,
+    MANAGE_CHANNELS: PermissionFlagsBits.ManageChannels,
+    MANAGE_GUILD: PermissionFlagsBits.ManageGuild,
+    ADD_REACTIONS: PermissionFlagsBits.AddReactions,
+    VIEW_AUDIT_LOG: PermissionFlagsBits.ViewAuditLog,
+    PRIORITY_SPEAKER: PermissionFlagsBits.PrioritySpeaker,
+    STREAM: PermissionFlagsBits.Stream,
+    VIEW_CHANNEL: PermissionFlagsBits.ViewChannel,
+    SEND_MESSAGES: PermissionFlagsBits.SendMessages,
+    SEND_TTS_MESSAGES: PermissionFlagsBits.SendTTSMessages,
+    MANAGE_MESSAGES: PermissionFlagsBits.ManageMessages,
+    EMBED_LINKS: PermissionFlagsBits.EmbedLinks,
+    ATTACH_FILES: PermissionFlagsBits.AttachFiles,
+    READ_MESSAGE_HISTORY: PermissionFlagsBits.ReadMessageHistory,
+    MENTION_EVERYONE: PermissionFlagsBits.MentionEveryone,
+    USE_EXTERNAL_EMOJIS: PermissionFlagsBits.UseExternalEmojis,
+    VIEW_GUILD_INSIGHTS: PermissionFlagsBits.ViewGuildInsights,
+    CONNECT: PermissionFlagsBits.Connect,
+    SPEAK: PermissionFlagsBits.Speak,
+    MUTE_MEMBERS: PermissionFlagsBits.MuteMembers,
+    DEAFEN_MEMBERS: PermissionFlagsBits.DeafenMembers,
+    MOVE_MEMBERS: PermissionFlagsBits.MoveMembers,
+    USE_VAD: PermissionFlagsBits.UseVAD,
+    CHANGE_NICKNAME: PermissionFlagsBits.ChangeNickname,
+    MANAGE_NICKNAMES: PermissionFlagsBits.ManageNicknames,
+    MANAGE_ROLES: PermissionFlagsBits.ManageRoles,
+    MANAGE_WEBHOOKS: PermissionFlagsBits.ManageWebhooks,
+    MANAGE_GUILD_EXPRESSIONS: PermissionFlagsBits.ManageGuildExpressions,
+    USE_APPLICATION_COMMANDS: PermissionFlagsBits.UseApplicationCommands,
+    REQUEST_TO_SPEAK: PermissionFlagsBits.RequestToSpeak,
+    MANAGE_EVENTS: PermissionFlagsBits.ManageEvents,
+    MANAGE_THREADS: PermissionFlagsBits.ManageThreads,
+    CREATE_PUBLIC_THREADS: PermissionFlagsBits.CreatePublicThreads,
+    CREATE_PRIVATE_THREADS: PermissionFlagsBits.CreatePrivateThreads,
+    USE_EXTERNAL_STICKERS: PermissionFlagsBits.UseExternalStickers,
+    SEND_MESSAGES_IN_THREADS: PermissionFlagsBits.SendMessagesInThreads,
+    USE_EMBEDDED_ACTIVITIES: PermissionFlagsBits.UseEmbeddedActivities,
+    MODERATE_MEMBERS: PermissionFlagsBits.ModerateMembers,
+    VIEW_CREATOR_MONETIZATION_ANALYTICS: PermissionFlagsBits.ViewCreatorMonetizationAnalytics,
+    USE_SOUNDBOARD: PermissionFlagsBits.UseSoundboard,
+    CREATE_GUILD_EXPRESSIONS: PermissionFlagsBits.CreateGuildExpressions,
+    CREATE_EVENTS: PermissionFlagsBits.CreateEvents,
+    USE_EXTERNAL_SOUNDS: PermissionFlagsBits.UseExternalSounds,
+    SEND_VOICE_MESSAGES: PermissionFlagsBits.SendVoiceMessages,
+    SEND_POLLS: PermissionFlagsBits.SendPolls,
+    USE_EXTERNAL_APPS: PermissionFlagsBits.UseExternalApps,
+};
+
+const BIT_TO_PERMISSION_NAME: Array<{ bit: bigint; name: string }> = Object.entries(
+    PERMISSION_NAME_TO_BIT,
+).map(([name, bit]) => ({ bit, name }));
+
+export function permissionNamesToBitfield(names: string[]): string {
+    let bits = 0n;
+    for (const name of names) {
+        const bit = PERMISSION_NAME_TO_BIT[name];
+        if (bit === undefined) {
+            throw new Error(`Unknown permission flag: ${name}`);
+        }
+        bits |= bit;
+    }
+    return bits.toString();
+}
+
+export function bitfieldToPermissionNames(bitfield: string | bigint): string[] {
+    const bits = typeof bitfield === 'bigint' ? bitfield : BigInt(bitfield);
+    const names: string[] = [];
+    for (const { bit, name } of BIT_TO_PERMISSION_NAME) {
+        if ((bits & bit) === bit) names.push(name);
+    }
+    return names;
+}
+
+export function mapPermissionOverwrite(overwrite: PermissionOverwrites): PermissionOverwrite {
+    return {
+        id: overwrite.id,
+        type: overwrite.type === 0 ? OverwriteType.ROLE : OverwriteType.MEMBER,
+        allow: bitfieldToPermissionNames(overwrite.allow.bitfield),
+        deny: bitfieldToPermissionNames(overwrite.deny.bitfield),
+    };
+}
+
+export function mapApiPermissionOverwrite(raw: any): PermissionOverwrite {
+    return {
+        id: raw.id,
+        type: Number(raw.type) === 0 ? OverwriteType.ROLE : OverwriteType.MEMBER,
+        allow: bitfieldToPermissionNames(String(raw.allow ?? '0')),
+        deny: bitfieldToPermissionNames(String(raw.deny ?? '0')),
     };
 }
