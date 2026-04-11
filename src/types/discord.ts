@@ -228,6 +228,34 @@ export interface CreateThreadOptions {
     reason?: string;
 }
 
+// ─── Invite ─────────────────────────────────────────────────────
+
+export interface Invite {
+    code: string;
+    url: string;
+    channelId: string | null;
+    channelName: string | null;
+    guildId: string | null;
+    inviterId: string | null;
+    inviterName: string | null;
+    uses: number | null;
+    maxUses: number | null;
+    maxAge: number | null;
+    temporary: boolean;
+    createdAt: string | null;
+    expiresAt: string | null;
+    approximateMemberCount: number | null;
+    approximatePresenceCount: number | null;
+}
+
+export interface CreateInviteOptions {
+    channelId: string;
+    maxUses?: number;
+    maxAge?: number;
+    temporary?: boolean;
+    unique?: boolean;
+}
+
 // ─── Pagination ─────────────────────────────────────────────────
 
 export interface PaginatedResult<T> {
