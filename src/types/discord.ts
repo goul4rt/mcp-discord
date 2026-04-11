@@ -237,3 +237,23 @@ export interface PaginatedResult<T> {
     cursor?: string;
     error?: string;
 }
+
+// ─── Channel Permissions ────────────────────────────────────────
+
+export enum OverwriteType {
+    ROLE = 'role',
+    MEMBER = 'member',
+}
+
+export interface PermissionOverwrite {
+    id: string;
+    type: OverwriteType;
+    allow: string[];
+    deny: string[];
+}
+
+export interface ChannelPermissionsAudit {
+    channelId: string;
+    channelName: string;
+    overwrites: PermissionOverwrite[];
+}
