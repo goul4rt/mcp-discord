@@ -237,3 +237,54 @@ export interface PaginatedResult<T> {
     cursor?: string;
     error?: string;
 }
+
+// ─── Forum ──────────────────────────────────────────────────────
+
+export interface ForumTag {
+    id: string;
+    name: string;
+    moderated: boolean;
+    emoji: { id: string | null; name: string | null } | null;
+}
+
+export interface ForumTagInput {
+    name: string;
+    emoji?: { id?: string | null; name?: string | null };
+    moderated?: boolean;
+}
+
+export interface ForumPost {
+    id: string;
+    name: string;
+    parentId: string | null;
+    guildId: string | null;
+    ownerId: string | null;
+    archived: boolean;
+    locked: boolean;
+    appliedTagIds: string[];
+    messageCount: number | null;
+    createdAt: string | null;
+    autoArchiveDuration: number | null;
+}
+
+export interface CreateForumPostOptions {
+    channelId: string;
+    name: string;
+    content: string;
+    tagIds?: string[];
+    autoArchiveDuration?: 60 | 1440 | 4320 | 10080;
+}
+
+export interface UpdateForumPostOptions {
+    postId: string;
+    name?: string;
+    archived?: boolean;
+    locked?: boolean;
+    appliedTagIds?: string[];
+}
+
+export interface ReplyToForumOptions {
+    postId: string;
+    content?: string;
+    embeds?: DiscordEmbed[];
+}
