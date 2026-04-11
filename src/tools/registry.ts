@@ -487,7 +487,7 @@ const moderationTools: ToolDefinition[] = [
                 guildId: input.guild_id,
                 userId: input.user_id,
                 reason: input.reason,
-                deleteMessageSeconds: input.delete_message_days ? input.delete_message_days * 86400 : undefined,
+                deleteMessageSeconds: input.delete_message_days !== undefined ? input.delete_message_days * 86400 : undefined,
             });
             return { success: true };
         },

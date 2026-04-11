@@ -567,6 +567,21 @@ describe('moderation tools', () => {
         });
     });
 
+    it('ban_user preserves delete_message_days of 0 as deleteMessageSeconds: 0', async () => {
+        const tool = findTool('ban_user');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { guild_id: GUILD, user_id: USER, reason: 'abuse', delete_message_days: 0 },
+            provider,
+        );
+        expect(provider.banUser).toHaveBeenCalledWith({
+            guildId: GUILD,
+            userId: USER,
+            reason: 'abuse',
+            deleteMessageSeconds: 0,
+        });
+    });
+
     it('ban_user rejects delete_message_days greater than 7', () => {
         const tool = findTool('ban_user');
         expect(() => tool.schema.parse({ guild_id: GUILD, user_id: USER, delete_message_days: 8 })).toThrow();
