@@ -527,16 +527,86 @@ const webhookTools: ToolDefinition[] = [];
 const forumTools: ToolDefinition[] = [];
 
 // ═════════════════════════════════════════════════════════════════
-// INVITE TOOLS — populated by PR 4 (feat/invites-dms)
+// INVITE TOOLS
 // ═════════════════════════════════════════════════════════════════
 
-const inviteTools: ToolDefinition[] = [];
+const inviteTools: ToolDefinition[] = [
+    {
+        name: 'list_invites',
+        description: 'List all active invites in a server. Returns invite code, URL, channel, inviter, uses, and expiry info.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+        }),
+        handler: async (input, provider) => provider.listInvites(input.guild_id),
+    },
+    {
+        name: 'list_channel_invites',
+        description: 'List active invites for a specific channel.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The channel ID'),
+        }),
+        handler: async (input, provider) => provider.listChannelInvites(input.channel_id),
+    },
+    {
+        name: 'get_invite',
+        description: 'Get details about an invite by its code, including approximate member and presence counts when available.',
+        schema: z.object({
+            code: z.string().describe('The invite code (the part after discord.gg/)'),
+        }),
+        handler: async (input, provider) => provider.getInvite(input.code),
+    },
+    {
+        name: 'create_invite',
+        description: 'Create a new invite for a channel. Supports max uses, max age (seconds), temporary membership, and uniqueness.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The channel to create the invite for'),
+            max_uses: z.number().min(0).max(100).optional().describe('Maximum number of uses (0 = unlimited)'),
+            max_age: z.number().min(0).optional().describe('Duration in seconds before expiry (0 = never)'),
+            temporary: z.boolean().optional().describe('Whether the invite grants temporary membership'),
+            unique: z.boolean().optional().describe('If true, always create a new invite even if one with identical settings exists'),
+        }),
+        handler: async (input, provider) => provider.createInvite({
+            channelId: input.channel_id,
+            maxUses: input.max_uses,
+            maxAge: input.max_age,
+            temporary: input.temporary,
+            unique: input.unique,
+        }),
+    },
+    {
+        name: 'delete_invite',
+        description: 'Revoke an invite by its code.',
+        schema: z.object({
+            code: z.string().describe('The invite code to revoke'),
+            reason: z.string().optional().describe('Reason (audit log)'),
+        }),
+        handler: async (input, provider) => {
+            await provider.deleteInvite(input.code, input.reason);
+            return { success: true, code: input.code };
+        },
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
-// DM TOOLS — populated by PR 4 (feat/invites-dms)
+// DM TOOLS
 // ═════════════════════════════════════════════════════════════════
 
-const dmTools: ToolDefinition[] = [];
+const dmTools: ToolDefinition[] = [
+    {
+        name: 'send_dm',
+        description: 'Send a direct message to a user. Works for users who share a server with the bot and have DMs enabled. Supports plain text and rich embeds.',
+        schema: z.object({
+            user_id: snowflakeId.describe('The user to DM'),
+            content: z.string().optional().describe('Text content of the message'),
+            embeds: z.array(embedSchema).optional().describe('Rich embed objects'),
+        }),
+        handler: async (input, provider) => provider.sendDM({
+            userId: input.user_id,
+            content: input.content,
+            embeds: input.embeds,
+        }),
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
 // SCHEDULED EVENT TOOLS — populated by PR 5 (feat/scheduled-events)
