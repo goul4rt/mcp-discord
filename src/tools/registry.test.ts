@@ -499,3 +499,112 @@ describe('role tools', () => {
         expect(result).toEqual({ success: true });
     });
 });
+
+describe('moderation tools', () => {
+    const GUILD = '123456789012345678';
+    const USER = '567890123456789012';
+
+    it('timeout_user converts duration_minutes to durationMs and returns expires_at', async () => {
+        const tool = findTool('timeout_user');
+        const provider = makeStubProvider();
+        const before = Date.now();
+        const result = await tool.handler(
+            { guild_id: GUILD, user_id: USER, duration_minutes: 10, reason: 'spam' },
+            provider,
+        );
+        expect(provider.timeoutUser).toHaveBeenCalledWith({
+            guildId: GUILD,
+            userId: USER,
+            durationMs: 600_000,
+            reason: 'spam',
+        });
+        expect((result as any).success).toBe(true);
+        const expiresAtMs = Date.parse((result as any).expires_at);
+        expect(expiresAtMs).toBeGreaterThanOrEqual(before + 600_000);
+        expect(expiresAtMs).toBeLessThanOrEqual(Date.now() + 600_000 + 1000);
+    });
+
+    it('timeout_user rejects duration above 28 days', () => {
+        const tool = findTool('timeout_user');
+        expect(() => tool.schema.parse({ guild_id: GUILD, user_id: USER, duration_minutes: 40321 })).toThrow();
+    });
+
+    it('kick_user returns success and passes reason', async () => {
+        const tool = findTool('kick_user');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, user_id: USER, reason: 'violation' },
+            provider,
+        );
+        expect(provider.kickUser).toHaveBeenCalledWith({ guildId: GUILD, userId: USER, reason: 'violation' });
+        expect(result).toEqual({ success: true });
+    });
+
+    it('ban_user converts delete_message_days to deleteMessageSeconds', async () => {
+        const tool = findTool('ban_user');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { guild_id: GUILD, user_id: USER, reason: 'abuse', delete_message_days: 7 },
+            provider,
+        );
+        expect(provider.banUser).toHaveBeenCalledWith({
+            guildId: GUILD,
+            userId: USER,
+            reason: 'abuse',
+            deleteMessageSeconds: 604_800,
+        });
+    });
+
+    it('ban_user leaves deleteMessageSeconds undefined when delete_message_days is omitted', async () => {
+        const tool = findTool('ban_user');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, user_id: USER, reason: 'abuse' }, provider);
+        expect(provider.banUser).toHaveBeenCalledWith({
+            guildId: GUILD,
+            userId: USER,
+            reason: 'abuse',
+            deleteMessageSeconds: undefined,
+        });
+    });
+
+    it('ban_user rejects delete_message_days greater than 7', () => {
+        const tool = findTool('ban_user');
+        expect(() => tool.schema.parse({ guild_id: GUILD, user_id: USER, delete_message_days: 8 })).toThrow();
+    });
+
+    it('unban_user returns success and passes reason', async () => {
+        const tool = findTool('unban_user');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, user_id: USER, reason: 'appeal' },
+            provider,
+        );
+        expect(provider.unbanUser).toHaveBeenCalledWith(GUILD, USER, 'appeal');
+        expect(result).toEqual({ success: true });
+    });
+});
+
+describe('monitoring tools', () => {
+    const GUILD = '123456789012345678';
+    const USER = '567890123456789012';
+
+    it('get_audit_log defaults limit to 50', async () => {
+        const tool = findTool('get_audit_log');
+        const parsed = tool.schema.parse({ guild_id: GUILD });
+        expect(parsed.limit).toBe(50);
+
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, limit: 25 }, provider);
+        expect(provider.getAuditLog).toHaveBeenCalledWith(GUILD, 25);
+    });
+
+    it('check_mentions defaults limit to 25', async () => {
+        const tool = findTool('check_mentions');
+        const parsed = tool.schema.parse({ guild_id: GUILD });
+        expect(parsed.limit).toBe(25);
+
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, user_id: USER, limit: 10 }, provider);
+        expect(provider.checkMentions).toHaveBeenCalledWith(GUILD, USER, 10);
+    });
+});
