@@ -148,6 +148,15 @@ export interface DiscordMember {
     joinedAt: string;
     bot: boolean;
     status?: 'online' | 'idle' | 'dnd' | 'offline';
+    premiumSince?: string | null;
+    pending?: boolean;
+    voiceState?: {
+        channelId: string | null;
+        selfMute: boolean;
+        selfDeaf: boolean;
+        serverMute: boolean;
+        serverDeaf: boolean;
+    } | null;
 }
 
 export interface DiscordUser {
@@ -202,6 +211,14 @@ export interface KickOptions {
     guildId: string;
     userId: string;
     reason?: string;
+}
+
+export interface Ban {
+    userId: string;
+    username: string;
+    displayName: string;
+    avatar: string | null;
+    reason: string | null;
 }
 
 // ─── Audit Log ──────────────────────────────────────────────────
