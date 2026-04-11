@@ -30,6 +30,7 @@ import type {
     AuditLogEntry,
     BanOptions,
     CreateChannelOptions,
+    CreateInviteOptions,
     CreateRoleOptions,
     CreateThreadOptions,
     DiscordChannel,
@@ -42,6 +43,7 @@ import type {
     DiscordRole,
     DiscordUser,
     EditChannelOptions,
+    Invite,
     KickOptions,
     PaginatedResult,
     ReadMessagesOptions,
@@ -49,7 +51,8 @@ import type {
     SendMessageOptions,
     TimeoutOptions,
 } from '../types/discord.js';
-import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser } from '../utils/mappers.js';
+import type { SendDMOptions } from './capabilities/dms.js';
+import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapInvite, mapMember, mapMessage, mapRole, mapUser } from '../utils/mappers.js';
 
 export class IntegratedProvider implements DiscordProvider {
     readonly name = 'integrated';
@@ -413,10 +416,53 @@ export class IntegratedProvider implements DiscordProvider {
     // Methods added by PR 3 (feat/forums).
 
     // ─── Invites ─────────────────────────────────────────────────
-    // Methods added by PR 4 (feat/invites-dms).
+
+    async listInvites(guildId: string): Promise<Invite[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const invites = await guild.invites.fetch();
+        return invites.map(i => mapInvite(i));
+    }
+
+    async listChannelInvites(channelId: string): Promise<Invite[]> {
+        const channel = await this.client.channels.fetch(channelId);
+        assertGuildChannel(channel, channelId);
+        const invites = await (channel as any).fetchInvites();
+        return [...invites.values()].map((i: any) => mapInvite(i));
+    }
+
+    async getInvite(code: string): Promise<Invite> {
+        const invite = await this.client.fetchInvite(code);
+        return mapInvite(invite);
+    }
+
+    async createInvite(options: CreateInviteOptions): Promise<Invite> {
+        const channel = await this.client.channels.fetch(options.channelId);
+        assertGuildChannel(channel, options.channelId);
+        const invite = await (channel as any).createInvite({
+            maxUses: options.maxUses,
+            maxAge: options.maxAge,
+            temporary: options.temporary,
+            unique: options.unique,
+        });
+        return mapInvite(invite);
+    }
+
+    async deleteInvite(code: string, reason?: string): Promise<void> {
+        const invite = await this.client.fetchInvite(code);
+        await invite.delete(reason);
+    }
 
     // ─── DMs ─────────────────────────────────────────────────────
-    // Methods added by PR 4 (feat/invites-dms).
+
+    async sendDM(options: SendDMOptions): Promise<DiscordMessage> {
+        const user = await this.client.users.fetch(options.userId);
+        const dm = await user.createDM();
+        const payload: any = {};
+        if (options.content) payload.content = options.content;
+        if (options.embeds) payload.embeds = options.embeds;
+        const msg = await dm.send(payload);
+        return mapMessage(msg);
+    }
 
     // ─── Scheduled Events ────────────────────────────────────────
     // Methods added by PR 5 (feat/scheduled-events).

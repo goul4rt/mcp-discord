@@ -11,6 +11,7 @@ import {
     type Guild,
     type GuildBasedChannel,
     type GuildMember,
+    type Invite as DjsInvite,
     type Message,
     type Role,
     type User,
@@ -26,6 +27,7 @@ import {
     type DiscordMessage,
     type DiscordRole,
     type DiscordUser,
+    type Invite,
 } from '../types/discord.js';
 
 // ─── Channel Type Mapping ───────────────────────────────────────
@@ -245,5 +247,49 @@ export function mapApiMessage(msg: any, fallbackGuildId?: string): DiscordMessag
         })),
         replyTo: msg.message_reference?.message_id ?? null,
         pinned: msg.pinned ?? false,
+    };
+}
+
+// ─── Invite ────────────────────────────────────────────────────
+
+export function mapInvite(invite: DjsInvite): Invite {
+    const channel = invite.channel;
+    return {
+        code: invite.code,
+        url: invite.url,
+        channelId: invite.channelId ?? channel?.id ?? null,
+        channelName: (channel && 'name' in channel ? channel.name : null) ?? null,
+        guildId: invite.guild?.id ?? null,
+        inviterId: invite.inviterId ?? null,
+        inviterName: invite.inviter?.username ?? null,
+        uses: invite.uses ?? null,
+        maxUses: invite.maxUses ?? null,
+        maxAge: invite.maxAge ?? null,
+        temporary: invite.temporary ?? false,
+        createdAt: invite.createdAt?.toISOString() ?? null,
+        expiresAt: invite.expiresAt?.toISOString() ?? null,
+        approximateMemberCount: invite.memberCount ?? null,
+        approximatePresenceCount: invite.presenceCount ?? null,
+    };
+}
+
+export function mapApiInvite(raw: any): Invite {
+    const code: string = raw.code;
+    return {
+        code,
+        url: `https://discord.gg/${code}`,
+        channelId: raw.channel?.id ?? raw.channel_id ?? null,
+        channelName: raw.channel?.name ?? null,
+        guildId: raw.guild?.id ?? raw.guild_id ?? null,
+        inviterId: raw.inviter?.id ?? null,
+        inviterName: raw.inviter?.username ?? null,
+        uses: raw.uses ?? null,
+        maxUses: raw.max_uses ?? null,
+        maxAge: raw.max_age ?? null,
+        temporary: raw.temporary ?? false,
+        createdAt: raw.created_at ?? null,
+        expiresAt: raw.expires_at ?? null,
+        approximateMemberCount: raw.approximate_member_count ?? null,
+        approximatePresenceCount: raw.approximate_presence_count ?? null,
     };
 }
