@@ -43,3 +43,25 @@ describe('isGuildChannel', () => {
         expect(isGuildChannel(channel)).toBe(false);
     });
 });
+
+describe('isThreadChannel', () => {
+    it('returns true for PublicThread', () => {
+        expect(isThreadChannel({ type: ChannelType.PublicThread })).toBe(true);
+    });
+
+    it('returns true for PrivateThread', () => {
+        expect(isThreadChannel({ type: ChannelType.PrivateThread })).toBe(true);
+    });
+
+    it('returns true for AnnouncementThread', () => {
+        expect(isThreadChannel({ type: ChannelType.AnnouncementThread })).toBe(true);
+    });
+
+    it('returns false for GuildText', () => {
+        expect(isThreadChannel({ type: ChannelType.GuildText })).toBe(false);
+    });
+
+    it('returns false for GuildVoice', () => {
+        expect(isThreadChannel({ type: ChannelType.GuildVoice })).toBe(false);
+    });
+});
