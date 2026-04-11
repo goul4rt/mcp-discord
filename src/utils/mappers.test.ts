@@ -374,3 +374,102 @@ describe('mapRole', () => {
         });
     });
 });
+
+describe('mapApiMessage', () => {
+    it('maps a fully-populated REST API message', () => {
+        const raw = {
+            id: '555',
+            channel_id: '222',
+            guild_id: '333',
+            author: {
+                id: '666',
+                username: 'alice',
+                global_name: 'Alice',
+                bot: false,
+            },
+            content: 'hi',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            edited_timestamp: '2024-01-01T01:00:00.000Z',
+            attachments: [{ url: 'https://cdn/a.png', filename: 'a.png', size: 1024 }],
+            embeds: [{
+                title: 'title',
+                description: 'desc',
+                footer: { text: 'ft', icon_url: 'https://cdn/f.png' },
+                thumbnail: { url: 'https://cdn/t.png' },
+                image: { url: 'https://cdn/i.png' },
+                author: { name: 'a', url: 'https://example.com', icon_url: 'https://cdn/au.png' },
+                fields: [{ name: 'f', value: 'v', inline: false }],
+            }],
+            reactions: [{ emoji: { name: '👍', id: null }, count: 2, me: true }],
+            message_reference: { message_id: '999' },
+            pinned: true,
+        };
+
+        const result = mapApiMessage(raw);
+        expect(result.id).toBe('555');
+        expect(result.channelId).toBe('222');
+        expect(result.guildId).toBe('333');
+        expect(result.author).toEqual({ id: '666', username: 'alice', displayName: 'Alice', bot: false });
+        expect(result.editedTimestamp).toBe('2024-01-01T01:00:00.000Z');
+        expect(result.attachments[0]).toEqual({ url: 'https://cdn/a.png', name: 'a.png', size: 1024 });
+        expect(result.embeds[0].footer).toEqual({ text: 'ft', iconUrl: 'https://cdn/f.png' });
+        expect(result.embeds[0].author?.iconUrl).toBe('https://cdn/au.png');
+        expect(result.reactions).toEqual([{ emoji: '👍', count: 2, me: true }]);
+        expect(result.replyTo).toBe('999');
+        expect(result.pinned).toBe(true);
+    });
+
+    it('defaults displayName to username when global_name is absent', () => {
+        const raw = {
+            id: '555',
+            channel_id: '222',
+            author: { id: '666', username: 'alice' },
+            content: 'hi',
+            timestamp: '2024-01-01T00:00:00.000Z',
+        };
+        const result = mapApiMessage(raw);
+        expect(result.author.displayName).toBe('alice');
+        expect(result.author.bot).toBe(false);
+    });
+
+    it('defaults missing optional collections to empty arrays', () => {
+        const raw = {
+            id: '555',
+            channel_id: '222',
+            author: { id: '666', username: 'alice' },
+            content: 'hi',
+            timestamp: '2024-01-01T00:00:00.000Z',
+        };
+        const result = mapApiMessage(raw);
+        expect(result.attachments).toEqual([]);
+        expect(result.embeds).toEqual([]);
+        expect(result.reactions).toEqual([]);
+        expect(result.editedTimestamp).toBeNull();
+        expect(result.replyTo).toBeNull();
+        expect(result.pinned).toBe(false);
+    });
+
+    it('uses fallbackGuildId when guild_id is absent', () => {
+        const raw = {
+            id: '555',
+            channel_id: '222',
+            author: { id: '666', username: 'alice' },
+            content: 'hi',
+            timestamp: '2024-01-01T00:00:00.000Z',
+        };
+        const result = mapApiMessage(raw, '888');
+        expect(result.guildId).toBe('888');
+    });
+
+    it('returns null guildId when neither guild_id nor fallback is provided', () => {
+        const raw = {
+            id: '555',
+            channel_id: '222',
+            author: { id: '666', username: 'alice' },
+            content: 'hi',
+            timestamp: '2024-01-01T00:00:00.000Z',
+        };
+        const result = mapApiMessage(raw);
+        expect(result.guildId).toBeNull();
+    });
+});
