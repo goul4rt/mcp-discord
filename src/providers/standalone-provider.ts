@@ -57,9 +57,11 @@ import type {
     SendMessageOptions,
     TimeoutOptions,
     ChannelType,
+    UpdateWelcomeScreenOptions,
+    WelcomeScreen,
 } from '../types/discord.js';
 import type { SendDMOptions } from './capabilities/dms.js';
-import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage, mapApiInvite } from '../utils/mappers.js';
+import { mapApiWelcomeScreen, mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage, mapApiInvite } from '../utils/mappers.js';
 
 export class StandaloneProvider implements DiscordProvider {
     readonly name = 'standalone';
@@ -753,6 +755,26 @@ export class StandaloneProvider implements DiscordProvider {
     // Methods added by PR 5 (feat/scheduled-events).
 
     // ─── Screening ───────────────────────────────────────────────
-    // Methods added by PR 6b (feat/screening).
+
+    async getWelcomeScreen(guildId: string): Promise<WelcomeScreen> {
+        const raw = await this.rest.get(Routes.guildWelcomeScreen(guildId));
+        return mapApiWelcomeScreen(raw);
+    }
+
+    async updateWelcomeScreen(options: UpdateWelcomeScreenOptions): Promise<WelcomeScreen> {
+        const body: any = {};
+        if (options.enabled !== undefined) body.enabled = options.enabled;
+        if (options.description !== undefined) body.description = options.description;
+        if (options.welcomeChannels !== undefined) {
+            body.welcome_channels = options.welcomeChannels.map(wc => ({
+                channel_id: wc.channelId,
+                description: wc.description,
+                emoji_name: wc.emojiName ?? null,
+                emoji_id: wc.emojiId ?? null,
+            }));
+        }
+        const raw = await this.rest.patch(Routes.guildWelcomeScreen(options.guildId), { body });
+        return mapApiWelcomeScreen(raw);
+    }
 }
 
