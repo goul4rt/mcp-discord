@@ -21,7 +21,7 @@
  */
 
 import type { Client, FetchMessagesOptions, GuildBasedChannel, GuildChannel, GuildMember, TextChannel, Role, ThreadChannel, User } from 'discord.js';
-import { ChannelType as DjsChannelType } from 'discord.js';
+import { ChannelType as DjsChannelType, OverwriteType as DjsOverwriteType } from 'discord.js';
 
 import type { DiscordProvider, IntegratedProviderConfig } from './discord-provider.js';
 import { assertTextChannel, assertGuildChannel, assertThreadChannel } from '../utils/guards.js';
@@ -29,6 +29,7 @@ import { ProviderDefaults } from './base-provider.js';
 import type {
     AuditLogEntry,
     BanOptions,
+    ChannelPermissionsAudit,
     CreateChannelOptions,
     CreateRoleOptions,
     CreateThreadOptions,
@@ -44,12 +45,24 @@ import type {
     EditChannelOptions,
     KickOptions,
     PaginatedResult,
+    PermissionOverwrite,
     ReadMessagesOptions,
     SearchMessagesOptions,
     SendMessageOptions,
     TimeoutOptions,
 } from '../types/discord.js';
-import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser } from '../utils/mappers.js';
+import {
+    mapChannel,
+    mapChannelSummary,
+    mapGuild,
+    mapGuildDetailed,
+    mapMember,
+    mapMessage,
+    mapPermissionOverwrite,
+    mapRole,
+    mapUser,
+    permissionNamesToBitfield,
+} from '../utils/mappers.js';
 
 export class IntegratedProvider implements DiscordProvider {
     readonly name = 'integrated';
@@ -404,7 +417,85 @@ export class IntegratedProvider implements DiscordProvider {
     }
 
     // ─── Permissions ─────────────────────────────────────────────
-    // Methods added by PR 1 (feat/permissions).
+
+    async getChannelPermissions(channelId: string): Promise<PermissionOverwrite[]> {
+        const channel = await this.client.channels.fetch(channelId);
+        assertGuildChannel(channel, channelId);
+        const guildChannel = channel as GuildChannel;
+        return guildChannel.permissionOverwrites.cache.map(o => mapPermissionOverwrite(o));
+    }
+
+    async setRolePermission(
+        channelId: string,
+        roleId: string,
+        allow: string[],
+        deny: string[],
+    ): Promise<void> {
+        await this.client.rest.put(`/channels/${channelId}/permissions/${roleId}`, {
+            body: {
+                type: 0,
+                allow: permissionNamesToBitfield(allow),
+                deny: permissionNamesToBitfield(deny),
+            },
+        });
+    }
+
+    async setMemberPermission(
+        channelId: string,
+        userId: string,
+        allow: string[],
+        deny: string[],
+    ): Promise<void> {
+        await this.client.rest.put(`/channels/${channelId}/permissions/${userId}`, {
+            body: {
+                type: 1,
+                allow: permissionNamesToBitfield(allow),
+                deny: permissionNamesToBitfield(deny),
+            },
+        });
+    }
+
+    async resetChannelPermissions(channelId: string): Promise<void> {
+        const channel = await this.client.channels.fetch(channelId);
+        assertGuildChannel(channel, channelId);
+        const guildChannel = channel as GuildChannel;
+        const overwriteIds = guildChannel.permissionOverwrites.cache.map(o => o.id);
+        for (const id of overwriteIds) {
+            await this.client.rest.delete(`/channels/${channelId}/permissions/${id}`);
+        }
+    }
+
+    async copyPermissions(sourceChannelId: string, targetChannelId: string): Promise<void> {
+        const source = await this.client.channels.fetch(sourceChannelId);
+        assertGuildChannel(source, sourceChannelId);
+        const sourceChannel = source as GuildChannel;
+        for (const overwrite of sourceChannel.permissionOverwrites.cache.values()) {
+            await this.client.rest.put(`/channels/${targetChannelId}/permissions/${overwrite.id}`, {
+                body: {
+                    type: overwrite.type === DjsOverwriteType.Role ? 0 : 1,
+                    allow: overwrite.allow.bitfield.toString(),
+                    deny: overwrite.deny.bitfield.toString(),
+                },
+            });
+        }
+    }
+
+    async auditPermissions(guildId: string): Promise<ChannelPermissionsAudit[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const channels = await guild.channels.fetch();
+        const result: ChannelPermissionsAudit[] = [];
+        for (const channel of channels.values()) {
+            if (!channel) continue;
+            const overwrites = (channel as GuildChannel).permissionOverwrites?.cache;
+            if (!overwrites) continue;
+            result.push({
+                channelId: channel.id,
+                channelName: channel.name,
+                overwrites: overwrites.map(o => mapPermissionOverwrite(o)),
+            });
+        }
+        return result;
+    }
 
     // ─── Webhooks ────────────────────────────────────────────────
     // Methods added by PR 2 (feat/webhooks).
