@@ -20,7 +20,7 @@
  *   // then expose `server` via stdio or HTTP
  */
 
-import type { Client, GuildChannel, GuildMember, TextChannel, Role, ThreadChannel, User } from 'discord.js';
+import type { Client, FetchMessagesOptions, GuildChannel, GuildMember, TextChannel, Role, ThreadChannel, User } from 'discord.js';
 import { ChannelType as DjsChannelType } from 'discord.js';
 
 import type { DiscordProvider, IntegratedProviderConfig } from './discord-provider.js';
@@ -211,7 +211,7 @@ export class IntegratedProvider implements DiscordProvider {
         const channel = await this.client.channels.fetch(options.channelId);
         assertTextChannel(channel, options.channelId);
 
-        const fetchOptions: any = { limit: options.limit ?? 50 };
+        const fetchOptions: FetchMessagesOptions = { limit: options.limit ?? 50 };
         if (options.before) fetchOptions.before = options.before;
         if (options.after) fetchOptions.after = options.after;
         if (options.around) fetchOptions.around = options.around;
