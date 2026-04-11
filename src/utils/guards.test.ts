@@ -65,3 +65,51 @@ describe('isThreadChannel', () => {
         expect(isThreadChannel({ type: ChannelType.GuildVoice })).toBe(false);
     });
 });
+
+describe('assertTextChannel', () => {
+    it('does not throw for a valid text channel', () => {
+        const channel = { send: () => {}, messages: {} };
+        expect(() => assertTextChannel(channel, '123')).not.toThrow();
+    });
+
+    it('throws when channel is null', () => {
+        expect(() => assertTextChannel(null, '123')).toThrow(/Channel 123 not found/);
+    });
+
+    it('throws when channel is not text-based', () => {
+        const channel = { type: ChannelType.GuildVoice };
+        expect(() => assertTextChannel(channel, '123')).toThrow(/not a text-based channel/);
+    });
+});
+
+describe('assertGuildChannel', () => {
+    it('does not throw for a valid guild channel', () => {
+        const channel = { guild: {}, guildId: '123456789012345678' };
+        expect(() => assertGuildChannel(channel, '123')).not.toThrow();
+    });
+
+    it('throws when channel is null', () => {
+        expect(() => assertGuildChannel(null, '123')).toThrow(/Channel 123 not found/);
+    });
+
+    it('throws when channel is not a guild channel', () => {
+        const channel = { type: ChannelType.DM };
+        expect(() => assertGuildChannel(channel, '123')).toThrow(/not a guild channel/);
+    });
+});
+
+describe('assertThreadChannel', () => {
+    it('does not throw for a valid thread channel', () => {
+        const channel = { type: ChannelType.PublicThread };
+        expect(() => assertThreadChannel(channel, '123')).not.toThrow();
+    });
+
+    it('throws when channel is null', () => {
+        expect(() => assertThreadChannel(null, '123')).toThrow(/Channel 123 not found/);
+    });
+
+    it('throws when channel is not a thread', () => {
+        const channel = { type: ChannelType.GuildText };
+        expect(() => assertThreadChannel(channel, '123')).toThrow(/not a thread/);
+    });
+});
