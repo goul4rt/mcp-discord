@@ -20,7 +20,7 @@
  *   // then expose `server` via stdio or HTTP
  */
 
-import type { Client, FetchMessagesOptions, GuildBasedChannel, GuildChannel, GuildMember, TextChannel, Role, ThreadChannel, User } from 'discord.js';
+import type { Client, FetchMessagesOptions, ForumChannel, GuildBasedChannel, GuildChannel, GuildMember, TextChannel, Role, ThreadChannel, User } from 'discord.js';
 import { ChannelType as DjsChannelType } from 'discord.js';
 
 import type { DiscordProvider, IntegratedProviderConfig } from './discord-provider.js';
@@ -30,6 +30,7 @@ import type {
     AuditLogEntry,
     BanOptions,
     CreateChannelOptions,
+    CreateForumPostOptions,
     CreateRoleOptions,
     CreateThreadOptions,
     DiscordChannel,
@@ -42,14 +43,19 @@ import type {
     DiscordRole,
     DiscordUser,
     EditChannelOptions,
+    ForumPost,
+    ForumTag,
+    ForumTagInput,
     KickOptions,
     PaginatedResult,
     ReadMessagesOptions,
+    ReplyToForumOptions,
     SearchMessagesOptions,
     SendMessageOptions,
     TimeoutOptions,
+    UpdateForumPostOptions,
 } from '../types/discord.js';
-import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser } from '../utils/mappers.js';
+import { mapChannel, mapChannelSummary, mapForumPost, mapForumTag, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser } from '../utils/mappers.js';
 
 export class IntegratedProvider implements DiscordProvider {
     readonly name = 'integrated';
@@ -410,7 +416,109 @@ export class IntegratedProvider implements DiscordProvider {
     // Methods added by PR 2 (feat/webhooks).
 
     // ─── Forums ──────────────────────────────────────────────────
-    // Methods added by PR 3 (feat/forums).
+
+    async getForumChannels(guildId: string): Promise<DiscordChannelSummary[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const channels = await guild.channels.fetch();
+        return channels
+            .filter((c): c is NonNullable<typeof c> => c !== null && c.type === DjsChannelType.GuildForum)
+            .map(c => mapChannelSummary(c));
+    }
+
+    async createForumPost(options: CreateForumPostOptions): Promise<ForumPost> {
+        const channel = await this.client.channels.fetch(options.channelId);
+        if (!channel || channel.type !== DjsChannelType.GuildForum) {
+            throw new Error(`Channel ${options.channelId} is not a forum channel`);
+        }
+        const forum = channel as ForumChannel;
+        const thread = await forum.threads.create({
+            name: options.name,
+            autoArchiveDuration: options.autoArchiveDuration,
+            message: { content: options.content },
+            appliedTags: options.tagIds,
+        });
+        return mapForumPost(thread);
+    }
+
+    async getForumPost(postId: string): Promise<ForumPost> {
+        const channel = await this.client.channels.fetch(postId);
+        if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+            throw new Error(`Channel ${postId} is not a thread`);
+        }
+        return mapForumPost(channel as ThreadChannel);
+    }
+
+    async listForumThreads(channelId: string, archived?: boolean, limit?: number): Promise<ForumPost[]> {
+        const channel = await this.client.channels.fetch(channelId);
+        if (!channel || channel.type !== DjsChannelType.GuildForum) {
+            throw new Error(`Channel ${channelId} is not a forum channel`);
+        }
+        const forum = channel as ForumChannel;
+        const fetched = archived
+            ? await forum.threads.fetchArchived({ limit })
+            : await forum.threads.fetchActive();
+        const threads = Array.from(fetched.threads.values());
+        const sliced = limit ? threads.slice(0, limit) : threads;
+        return sliced.map(t => mapForumPost(t));
+    }
+
+    async deleteForumPost(postId: string, reason?: string): Promise<void> {
+        const channel = await this.client.channels.fetch(postId);
+        if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+            throw new Error(`Channel ${postId} is not a thread`);
+        }
+        await (channel as ThreadChannel).delete(reason);
+    }
+
+    async getForumTags(channelId: string): Promise<ForumTag[]> {
+        const channel = await this.client.channels.fetch(channelId);
+        if (!channel || channel.type !== DjsChannelType.GuildForum) {
+            throw new Error(`Channel ${channelId} is not a forum channel`);
+        }
+        return (channel as ForumChannel).availableTags.map(t => mapForumTag(t));
+    }
+
+    async setForumTags(channelId: string, tags: ForumTagInput[]): Promise<ForumTag[]> {
+        const channel = await this.client.channels.fetch(channelId);
+        if (!channel || channel.type !== DjsChannelType.GuildForum) {
+            throw new Error(`Channel ${channelId} is not a forum channel`);
+        }
+        const forum = channel as ForumChannel;
+        const updated = await forum.setAvailableTags(tags.map(t => ({
+            name: t.name,
+            moderated: t.moderated,
+            emoji: t.emoji ? { id: t.emoji.id ?? null, name: t.emoji.name ?? null } : null,
+        })));
+        return updated.availableTags.map(t => mapForumTag(t));
+    }
+
+    async updateForumPost(options: UpdateForumPostOptions): Promise<ForumPost> {
+        const channel = await this.client.channels.fetch(options.postId);
+        if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+            throw new Error(`Channel ${options.postId} is not a thread`);
+        }
+        const thread = channel as ThreadChannel;
+        const edited = await thread.edit({
+            name: options.name,
+            archived: options.archived,
+            locked: options.locked,
+            appliedTags: options.appliedTagIds,
+        });
+        return mapForumPost(edited);
+    }
+
+    async replyToForum(options: ReplyToForumOptions): Promise<DiscordMessage> {
+        const channel = await this.client.channels.fetch(options.postId);
+        if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+            throw new Error(`Channel ${options.postId} is not a thread`);
+        }
+        const thread = channel as ThreadChannel;
+        const payload: any = {};
+        if (options.content) payload.content = options.content;
+        if (options.embeds) payload.embeds = options.embeds;
+        const msg = await thread.send(payload);
+        return mapMessage(msg);
+    }
 
     // ─── Invites ─────────────────────────────────────────────────
     // Methods added by PR 4 (feat/invites-dms).
