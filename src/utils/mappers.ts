@@ -12,11 +12,13 @@ import {
     GuildScheduledEventStatus,
     type Guild,
     type GuildBasedChannel,
+    type GuildForumTag,
     type GuildMember,
     type GuildScheduledEvent,
     type Invite as DjsInvite,
     type Message,
     type Role,
+    type ThreadChannel,
     type User,
 } from 'discord.js';
 
@@ -32,6 +34,8 @@ import {
     type DiscordUser,
     type EventEntityType,
     type EventStatus,
+    type ForumPost,
+    type ForumTag,
     type Invite,
     type ScheduledEvent,
     type ScreeningField,
@@ -288,6 +292,62 @@ export function mapApiMessage(msg: any, fallbackGuildId?: string): DiscordMessag
         })),
         replyTo: msg.message_reference?.message_id ?? null,
         pinned: msg.pinned ?? false,
+    };
+}
+
+// ─── Forum ──────────────────────────────────────────────────────
+
+export function mapForumTag(tag: GuildForumTag): ForumTag {
+    return {
+        id: tag.id,
+        name: tag.name,
+        moderated: tag.moderated,
+        emoji: tag.emoji ? { id: tag.emoji.id, name: tag.emoji.name } : null,
+    };
+}
+
+export function mapApiForumTag(tag: any): ForumTag {
+    return {
+        id: tag.id,
+        name: tag.name,
+        moderated: tag.moderated ?? false,
+        emoji: tag.emoji_id || tag.emoji_name
+            ? { id: tag.emoji_id ?? null, name: tag.emoji_name ?? null }
+            : null,
+    };
+}
+
+export function mapForumPost(thread: ThreadChannel): ForumPost {
+    return {
+        id: thread.id,
+        name: thread.name,
+        parentId: thread.parentId,
+        guildId: thread.guildId ?? null,
+        ownerId: thread.ownerId ?? null,
+        archived: thread.archived ?? false,
+        locked: thread.locked ?? false,
+        appliedTagIds: thread.appliedTags ?? [],
+        messageCount: thread.messageCount ?? null,
+        createdAt: thread.createdAt?.toISOString() ?? null,
+        autoArchiveDuration: thread.autoArchiveDuration ?? null,
+    };
+}
+
+export function mapApiForumPost(thread: any, fallbackGuildId?: string): ForumPost {
+    const metadata = thread.thread_metadata ?? {};
+    return {
+        id: thread.id,
+        name: thread.name,
+        parentId: thread.parent_id ?? null,
+        guildId: thread.guild_id ?? fallbackGuildId ?? null,
+        ownerId: thread.owner_id ?? null,
+        archived: metadata.archived ?? false,
+        locked: metadata.locked ?? false,
+        appliedTagIds: thread.applied_tags ?? [],
+        messageCount: thread.message_count ?? null,
+        createdAt: metadata.create_timestamp
+            ?? new Date(Number(BigInt(thread.id) >> 22n) + 1420070400000).toISOString(),
+        autoArchiveDuration: metadata.auto_archive_duration ?? null,
     };
 }
 

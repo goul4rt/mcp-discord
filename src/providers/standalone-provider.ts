@@ -21,6 +21,7 @@ import {
     Routes,
     ChannelType as DjsChannelType,
     type TextChannel,
+    type ForumChannel,
     type Guild,
     type GuildMember,
     type Message,
@@ -36,6 +37,7 @@ import type {
     AuditLogEntry,
     BanOptions,
     CreateChannelOptions,
+    CreateForumPostOptions,
     CreateInviteOptions,
     CreateRoleOptions,
     CreateThreadOptions,
@@ -49,14 +51,19 @@ import type {
     DiscordRole,
     DiscordUser,
     EditChannelOptions,
+    ForumPost,
+    ForumTag,
+    ForumTagInput,
     Invite,
     KickOptions,
     PaginatedResult,
     ReadMessagesOptions,
+    ReplyToForumOptions,
     ScheduledEvent,
     SearchMessagesOptions,
     SendMessageOptions,
     TimeoutOptions,
+    UpdateForumPostOptions,
     ChannelType,
     UpdateWelcomeScreenOptions,
     WelcomeScreen,
@@ -67,7 +74,7 @@ import type {
     EditScheduledEventOptions,
     ScheduledEventInvite,
 } from './capabilities/scheduledEvents.js';
-import { mapApiScheduledEvent, mapApiWelcomeScreen, mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage, mapApiInvite } from '../utils/mappers.js';
+import { mapApiForumPost, mapApiForumTag, mapApiInvite, mapApiMessage, mapApiScheduledEvent, mapApiWelcomeScreen, mapChannel, mapChannelSummary, mapChannelType, mapForumPost, mapForumTag, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser } from '../utils/mappers.js';
 
 export class StandaloneProvider implements DiscordProvider {
     readonly name = 'standalone';
@@ -698,7 +705,174 @@ export class StandaloneProvider implements DiscordProvider {
     // Methods added by PR 2 (feat/webhooks).
 
     // ─── Forums ──────────────────────────────────────────────────
-    // Methods added by PR 3 (feat/forums).
+
+    async getForumChannels(guildId: string): Promise<DiscordChannelSummary[]> {
+        if (this.client) {
+            const guild = await this.resolveGuild(guildId);
+            const channels = await guild.channels.fetch();
+            return channels
+                .filter((c): c is NonNullable<typeof c> => c !== null && c.type === DjsChannelType.GuildForum)
+                .map(c => mapChannelSummary(c));
+        }
+        const channels = (await this.rest.get(Routes.guildChannels(guildId))) as any[];
+        return channels
+            .filter(c => c.type === 15)
+            .map(c => ({
+                id: c.id,
+                name: c.name,
+                type: mapChannelType(c.type),
+                parentId: c.parent_id ?? null,
+                parentName: null,
+                position: c.position ?? 0,
+                topic: c.topic ?? null,
+            }));
+    }
+
+    async createForumPost(options: CreateForumPostOptions): Promise<ForumPost> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(options.channelId);
+            if (!channel || channel.type !== DjsChannelType.GuildForum) {
+                throw new Error(`Channel ${options.channelId} is not a forum channel`);
+            }
+            const forum = channel as ForumChannel;
+            const thread = await forum.threads.create({
+                name: options.name,
+                autoArchiveDuration: options.autoArchiveDuration,
+                message: { content: options.content },
+                appliedTags: options.tagIds,
+            });
+            return mapForumPost(thread);
+        }
+        const body: any = {
+            name: options.name,
+            message: { content: options.content },
+        };
+        if (options.autoArchiveDuration) body.auto_archive_duration = options.autoArchiveDuration;
+        if (options.tagIds) body.applied_tags = options.tagIds;
+        const thread = (await this.rest.post(Routes.threads(options.channelId), { body })) as any;
+        return mapApiForumPost(thread);
+    }
+
+    async getForumPost(postId: string): Promise<ForumPost> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(postId);
+            if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+                throw new Error(`Channel ${postId} is not a thread`);
+            }
+            return mapForumPost(channel as ThreadChannel);
+        }
+        const thread = (await this.rest.get(Routes.channel(postId))) as any;
+        return mapApiForumPost(thread);
+    }
+
+    async listForumThreads(channelId: string, archived?: boolean, limit?: number): Promise<ForumPost[]> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(channelId);
+            if (!channel || channel.type !== DjsChannelType.GuildForum) {
+                throw new Error(`Channel ${channelId} is not a forum channel`);
+            }
+            const forum = channel as ForumChannel;
+            const fetched = archived
+                ? await forum.threads.fetchArchived({ limit })
+                : await forum.threads.fetchActive();
+            const threads = Array.from(fetched.threads.values());
+            const sliced = limit ? threads.slice(0, limit) : threads;
+            return sliced.map(t => mapForumPost(t));
+        }
+        if (archived) {
+            const query = new URLSearchParams();
+            if (limit) query.set('limit', String(limit));
+            const result = (await this.rest.get(
+                `/channels/${channelId}/threads/archived/public`,
+                { query }
+            )) as any;
+            return (result.threads ?? []).map((t: any) => mapApiForumPost(t));
+        }
+        // Active threads are fetched at the guild level. Derive the guild from the channel.
+        const channel = (await this.rest.get(Routes.channel(channelId))) as any;
+        const guildId: string = channel.guild_id;
+        if (!guildId) throw new Error(`Channel ${channelId} has no guild`);
+        const result = (await this.rest.get(Routes.guildActiveThreads(guildId))) as any;
+        const threads = (result.threads ?? []).filter((t: any) => t.parent_id === channelId);
+        const sliced = limit ? threads.slice(0, limit) : threads;
+        return sliced.map((t: any) => mapApiForumPost(t, guildId));
+    }
+
+    async deleteForumPost(postId: string, reason?: string): Promise<void> {
+        await this.rest.delete(Routes.channel(postId), { reason });
+    }
+
+    async getForumTags(channelId: string): Promise<ForumTag[]> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(channelId);
+            if (!channel || channel.type !== DjsChannelType.GuildForum) {
+                throw new Error(`Channel ${channelId} is not a forum channel`);
+            }
+            return (channel as ForumChannel).availableTags.map(t => mapForumTag(t));
+        }
+        const c = (await this.rest.get(Routes.channel(channelId))) as any;
+        return (c.available_tags ?? []).map((t: any) => mapApiForumTag(t));
+    }
+
+    async setForumTags(channelId: string, tags: ForumTagInput[]): Promise<ForumTag[]> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(channelId);
+            if (!channel || channel.type !== DjsChannelType.GuildForum) {
+                throw new Error(`Channel ${channelId} is not a forum channel`);
+            }
+            const forum = channel as ForumChannel;
+            const updated = await forum.setAvailableTags(tags.map(t => ({
+                name: t.name,
+                moderated: t.moderated,
+                emoji: t.emoji ? { id: t.emoji.id ?? null, name: t.emoji.name ?? null } : null,
+            })));
+            return updated.availableTags.map(t => mapForumTag(t));
+        }
+        const body = {
+            available_tags: tags.map(t => ({
+                name: t.name,
+                moderated: t.moderated ?? false,
+                emoji_id: t.emoji?.id ?? null,
+                emoji_name: t.emoji?.name ?? null,
+            })),
+        };
+        const c = (await this.rest.patch(Routes.channel(channelId), { body })) as any;
+        return (c.available_tags ?? []).map((t: any) => mapApiForumTag(t));
+    }
+
+    async updateForumPost(options: UpdateForumPostOptions): Promise<ForumPost> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(options.postId);
+            if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+                throw new Error(`Channel ${options.postId} is not a thread`);
+            }
+            const thread = channel as ThreadChannel;
+            const edited = await thread.edit({
+                name: options.name,
+                archived: options.archived,
+                locked: options.locked,
+                appliedTags: options.appliedTagIds,
+            });
+            return mapForumPost(edited);
+        }
+        const body: any = {};
+        if (options.name !== undefined) body.name = options.name;
+        if (options.archived !== undefined) body.archived = options.archived;
+        if (options.locked !== undefined) body.locked = options.locked;
+        if (options.appliedTagIds !== undefined) body.applied_tags = options.appliedTagIds;
+        const thread = (await this.rest.patch(Routes.channel(options.postId), { body })) as any;
+        return mapApiForumPost(thread);
+    }
+
+    async replyToForum(options: ReplyToForumOptions): Promise<DiscordMessage> {
+        const body: any = {};
+        if (options.content) body.content = options.content;
+        if (options.embeds) body.embeds = options.embeds;
+        const msg = (await this.rest.post(Routes.channelMessages(options.postId), {
+            body,
+        })) as APIMessage;
+        return mapApiMessage(msg);
+    }
 
     // ─── Invites ─────────────────────────────────────────────────
 

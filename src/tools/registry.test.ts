@@ -76,8 +76,8 @@ describe('snowflake ID schema', () => {
 });
 
 describe('tool registry', () => {
-    it('exposes all 48 tools via allTools', () => {
-        expect(allTools).toHaveLength(48);
+    it('exposes all 57 tools via allTools', () => {
+        expect(allTools).toHaveLength(57);
     });
 
     it('has a unique name per tool', () => {
@@ -681,6 +681,191 @@ describe('monitoring tools', () => {
         const provider = makeStubProvider();
         await tool.handler({ guild_id: GUILD, user_id: USER, limit: 10 }, provider);
         expect(provider.checkMentions).toHaveBeenCalledWith(GUILD, USER, 10);
+    });
+});
+
+describe('forum tools', () => {
+    const GUILD = '123456789012345678';
+    const CHANNEL = '234567890123456789';
+    const POST = '345678901234567890';
+    const TAG_A = '456789012345678901';
+    const TAG_B = '567890123456789012';
+
+    it('get_forum_channels calls provider.getForumChannels with guild_id', async () => {
+        const tool = findTool('get_forum_channels');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.getForumChannels).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('get_forum_channels schema rejects missing guild_id', () => {
+        const tool = findTool('get_forum_channels');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('create_forum_post transforms snake_case to camelCase and converts auto_archive_duration', async () => {
+        const tool = findTool('create_forum_post');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                channel_id: CHANNEL,
+                name: 'New topic',
+                content: 'First post body',
+                tag_ids: [TAG_A, TAG_B],
+                auto_archive_duration: '1440',
+            },
+            provider,
+        );
+        expect(provider.createForumPost).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            name: 'New topic',
+            content: 'First post body',
+            tagIds: [TAG_A, TAG_B],
+            autoArchiveDuration: 1440,
+        });
+    });
+
+    it('create_forum_post schema requires name and content', () => {
+        const tool = findTool('create_forum_post');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL })).toThrow();
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, name: 'x' })).toThrow();
+    });
+
+    it('create_forum_post schema rejects invalid auto_archive_duration', () => {
+        const tool = findTool('create_forum_post');
+        expect(() => tool.schema.parse({
+            channel_id: CHANNEL,
+            name: 'x',
+            content: 'y',
+            auto_archive_duration: '99',
+        })).toThrow();
+    });
+
+    it('get_forum_post calls provider.getForumPost', async () => {
+        const tool = findTool('get_forum_post');
+        const provider = makeStubProvider();
+        await tool.handler({ post_id: POST }, provider);
+        expect(provider.getForumPost).toHaveBeenCalledWith(POST);
+    });
+
+    it('list_forum_threads passes archived and limit', async () => {
+        const tool = findTool('list_forum_threads');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL, archived: true, limit: 10 }, provider);
+        expect(provider.listForumThreads).toHaveBeenCalledWith(CHANNEL, true, 10);
+    });
+
+    it('list_forum_threads rejects limit greater than 100', () => {
+        const tool = findTool('list_forum_threads');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, limit: 101 })).toThrow();
+    });
+
+    it('delete_forum_post returns success payload', async () => {
+        const tool = findTool('delete_forum_post');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ post_id: POST, reason: 'spam' }, provider);
+        expect(provider.deleteForumPost).toHaveBeenCalledWith(POST, 'spam');
+        expect(result).toEqual({ success: true, post_id: POST });
+    });
+
+    it('get_forum_tags calls provider.getForumTags', async () => {
+        const tool = findTool('get_forum_tags');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.getForumTags).toHaveBeenCalledWith(CHANNEL);
+    });
+
+    it('set_forum_tags passes tags array to provider', async () => {
+        const tool = findTool('set_forum_tags');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                channel_id: CHANNEL,
+                tags: [
+                    { name: 'Bug', moderated: true },
+                    { name: 'Feature', emoji: { name: '💡' } },
+                ],
+            },
+            provider,
+        );
+        expect(provider.setForumTags).toHaveBeenCalledWith(CHANNEL, [
+            { name: 'Bug', moderated: true },
+            { name: 'Feature', emoji: { name: '💡' } },
+        ]);
+    });
+
+    it('set_forum_tags schema requires tag name', () => {
+        const tool = findTool('set_forum_tags');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, tags: [{ moderated: true }] })).toThrow();
+    });
+
+    it('update_forum_post transforms applied_tag_ids to appliedTagIds', async () => {
+        const tool = findTool('update_forum_post');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                post_id: POST,
+                name: 'Renamed',
+                archived: true,
+                locked: false,
+                applied_tag_ids: [TAG_A],
+            },
+            provider,
+        );
+        expect(provider.updateForumPost).toHaveBeenCalledWith({
+            postId: POST,
+            name: 'Renamed',
+            archived: true,
+            locked: false,
+            appliedTagIds: [TAG_A],
+        });
+    });
+
+    it('reply_to_forum transforms content and embeds', async () => {
+        const tool = findTool('reply_to_forum');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { post_id: POST, content: 'hello', embeds: [{ title: 'hi' }] },
+            provider,
+        );
+        expect(provider.replyToForum).toHaveBeenCalledWith({
+            postId: POST,
+            content: 'hello',
+            embeds: [{ title: 'hi' }],
+        });
+    });
+
+    it('create_forum_post leaves autoArchiveDuration undefined when omitted', async () => {
+        const tool = findTool('create_forum_post');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL, name: 'x', content: 'y' }, provider);
+        expect(provider.createForumPost).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            name: 'x',
+            content: 'y',
+            tagIds: undefined,
+            autoArchiveDuration: undefined,
+        });
+    });
+
+    it('list_forum_threads defaults archived and limit to undefined', async () => {
+        const tool = findTool('list_forum_threads');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.listForumThreads).toHaveBeenCalledWith(CHANNEL, undefined, undefined);
+    });
+
+    it('delete_forum_post passes undefined reason when omitted', async () => {
+        const tool = findTool('delete_forum_post');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ post_id: POST }, provider);
+        expect(provider.deleteForumPost).toHaveBeenCalledWith(POST, undefined);
+        expect(result).toEqual({ success: true, post_id: POST });
+    });
+
+    it('set_forum_tags accepts empty tags array', () => {
+        const tool = findTool('set_forum_tags');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, tags: [] })).not.toThrow();
     });
 });
 

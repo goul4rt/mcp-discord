@@ -12,6 +12,10 @@ import {
     mapUser,
     mapRole,
     mapApiMessage,
+    mapForumTag,
+    mapApiForumTag,
+    mapForumPost,
+    mapApiForumPost,
 } from './mappers.js';
 import { ChannelType } from '../types/discord.js';
 
@@ -471,5 +475,155 @@ describe('mapApiMessage', () => {
         };
         const result = mapApiMessage(raw);
         expect(result.guildId).toBeNull();
+    });
+});
+
+describe('mapForumTag', () => {
+    it('maps a tag with emoji', () => {
+        const result = mapForumTag({
+            id: '111',
+            name: 'Bug',
+            moderated: true,
+            emoji: { id: '222', name: null },
+        } as any);
+        expect(result).toEqual({
+            id: '111',
+            name: 'Bug',
+            moderated: true,
+            emoji: { id: '222', name: null },
+        });
+    });
+
+    it('maps a tag with null emoji', () => {
+        const result = mapForumTag({
+            id: '111',
+            name: 'Feature',
+            moderated: false,
+            emoji: null,
+        } as any);
+        expect(result.emoji).toBeNull();
+    });
+});
+
+describe('mapApiForumTag', () => {
+    it('maps emoji_id/emoji_name into nested emoji object', () => {
+        const result = mapApiForumTag({
+            id: '111',
+            name: 'Bug',
+            moderated: true,
+            emoji_id: '222',
+            emoji_name: null,
+        });
+        expect(result).toEqual({
+            id: '111',
+            name: 'Bug',
+            moderated: true,
+            emoji: { id: '222', name: null },
+        });
+    });
+
+    it('returns null emoji when both emoji fields are missing', () => {
+        const result = mapApiForumTag({ id: '111', name: 'Plain' });
+        expect(result.emoji).toBeNull();
+        expect(result.moderated).toBe(false);
+    });
+});
+
+describe('mapForumPost', () => {
+    it('maps a thread channel into a forum post', () => {
+        const thread: any = {
+            id: '111',
+            name: 'Topic',
+            parentId: '222',
+            guildId: '333',
+            ownerId: '444',
+            archived: false,
+            locked: true,
+            appliedTags: ['tag1', 'tag2'],
+            messageCount: 5,
+            createdAt: new Date('2024-01-01T00:00:00.000Z'),
+            autoArchiveDuration: 1440,
+        };
+        const result = mapForumPost(thread);
+        expect(result).toEqual({
+            id: '111',
+            name: 'Topic',
+            parentId: '222',
+            guildId: '333',
+            ownerId: '444',
+            archived: false,
+            locked: true,
+            appliedTagIds: ['tag1', 'tag2'],
+            messageCount: 5,
+            createdAt: '2024-01-01T00:00:00.000Z',
+            autoArchiveDuration: 1440,
+        });
+    });
+
+    it('defaults missing nullable fields', () => {
+        const thread: any = {
+            id: '111',
+            name: 'Topic',
+            parentId: null,
+            guildId: null,
+            ownerId: null,
+            archived: null,
+            locked: null,
+            appliedTags: null,
+            messageCount: null,
+            createdAt: null,
+            autoArchiveDuration: null,
+        };
+        const result = mapForumPost(thread);
+        expect(result.archived).toBe(false);
+        expect(result.locked).toBe(false);
+        expect(result.appliedTagIds).toEqual([]);
+        expect(result.createdAt).toBeNull();
+    });
+});
+
+describe('mapApiForumPost', () => {
+    it('maps a raw REST thread object', () => {
+        const raw = {
+            id: '111',
+            name: 'Topic',
+            parent_id: '222',
+            guild_id: '333',
+            owner_id: '444',
+            applied_tags: ['tag1'],
+            message_count: 3,
+            thread_metadata: {
+                archived: true,
+                locked: false,
+                auto_archive_duration: 60,
+                create_timestamp: '2024-01-01T00:00:00.000Z',
+            },
+        };
+        const result = mapApiForumPost(raw);
+        expect(result).toEqual({
+            id: '111',
+            name: 'Topic',
+            parentId: '222',
+            guildId: '333',
+            ownerId: '444',
+            archived: true,
+            locked: false,
+            appliedTagIds: ['tag1'],
+            messageCount: 3,
+            createdAt: '2024-01-01T00:00:00.000Z',
+            autoArchiveDuration: 60,
+        });
+    });
+
+    it('falls back to snowflake-derived createdAt when metadata is missing', () => {
+        const raw = {
+            id: '175928847299117063',
+            name: 'Topic',
+        };
+        const result = mapApiForumPost(raw, '999');
+        expect(result.guildId).toBe('999');
+        expect(result.archived).toBe(false);
+        expect(result.appliedTagIds).toEqual([]);
+        expect(typeof result.createdAt).toBe('string');
     });
 });
