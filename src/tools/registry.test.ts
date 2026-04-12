@@ -76,8 +76,8 @@ describe('snowflake ID schema', () => {
 });
 
 describe('tool registry', () => {
-    it('exposes all 42 tools via allTools', () => {
-        expect(allTools).toHaveLength(42);
+    it('exposes all 57 tools via allTools', () => {
+        expect(allTools).toHaveLength(57);
     });
 
     it('has a unique name per tool', () => {
@@ -167,6 +167,7 @@ describe('channel tools', () => {
         await tool.handler(
             {
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 name: 'renamed',
                 topic: 'new',
                 nsfw: false,
@@ -201,6 +202,7 @@ describe('channel tools', () => {
         await tool.handler(
             {
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 name: 'thread',
                 message_id: MESSAGE,
                 auto_archive_duration: '1440',
@@ -299,6 +301,7 @@ describe('message tools', () => {
                 query: 'hello',
                 author_id: AUTHOR,
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 limit: 10,
             },
             provider,
@@ -587,6 +590,75 @@ describe('moderation tools', () => {
     });
 });
 
+describe('screening tools', () => {
+    const GUILD = '123456789012345678';
+    const CHANNEL = '234567890123456789';
+    const EMOJI = '345678901234567890';
+
+    it('get_membership_screening calls provider.getWelcomeScreen with the guild_id', async () => {
+        const tool = findTool('get_membership_screening');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.getWelcomeScreen).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('get_membership_screening schema rejects missing guild_id', () => {
+        const tool = findTool('get_membership_screening');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('update_membership_screening transforms snake_case to camelCase', async () => {
+        const tool = findTool('update_membership_screening');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                enabled: true,
+                description: 'Welcome!',
+                welcome_channels: [
+                    { channel_id: CHANNEL, description: 'General chat', emoji_name: 'wave', emoji_id: EMOJI },
+                ],
+            },
+            provider,
+        );
+        expect(provider.updateWelcomeScreen).toHaveBeenCalledWith({
+            guildId: GUILD,
+            enabled: true,
+            description: 'Welcome!',
+            welcomeChannels: [
+                { channelId: CHANNEL, description: 'General chat', emojiName: 'wave', emojiId: EMOJI },
+            ],
+        });
+    });
+
+    it('update_membership_screening omits undefined optional fields', async () => {
+        const tool = findTool('update_membership_screening');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, enabled: false }, provider);
+        expect(provider.updateWelcomeScreen).toHaveBeenCalledWith({
+            guildId: GUILD,
+            enabled: false,
+            description: undefined,
+            welcomeChannels: undefined,
+        });
+    });
+
+    it('update_membership_screening schema rejects a welcome channel without channel_id', () => {
+        const tool = findTool('update_membership_screening');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                welcome_channels: [{ description: 'missing channel' }],
+            }),
+        ).toThrow();
+    });
+
+    it('update_membership_screening schema allows empty welcome_channels array', () => {
+        const tool = findTool('update_membership_screening');
+        expect(() => tool.schema.parse({ guild_id: GUILD, welcome_channels: [] })).not.toThrow();
+    });
+});
+
 describe('monitoring tools', () => {
     const GUILD = '123456789012345678';
     const USER = '567890123456789012';
@@ -794,5 +866,311 @@ describe('forum tools', () => {
     it('set_forum_tags accepts empty tags array', () => {
         const tool = findTool('set_forum_tags');
         expect(() => tool.schema.parse({ channel_id: CHANNEL, tags: [] })).not.toThrow();
+    });
+});
+
+describe('invite tools', () => {
+    const GUILD = '123456789012345678';
+    const CHANNEL = '234567890123456789';
+    const CODE = 'abc123';
+
+    it('list_invites calls provider.listInvites with the guild_id', async () => {
+        const tool = findTool('list_invites');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.listInvites).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('list_invites schema rejects missing guild_id', () => {
+        const tool = findTool('list_invites');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('list_channel_invites calls provider.listChannelInvites with the channel_id', async () => {
+        const tool = findTool('list_channel_invites');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.listChannelInvites).toHaveBeenCalledWith(CHANNEL);
+    });
+
+    it('get_invite calls provider.getInvite with the code', async () => {
+        const tool = findTool('get_invite');
+        const provider = makeStubProvider();
+        await tool.handler({ code: CODE }, provider);
+        expect(provider.getInvite).toHaveBeenCalledWith(CODE);
+    });
+
+    it('get_invite schema rejects missing code', () => {
+        const tool = findTool('get_invite');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('create_invite transforms snake_case to camelCase', async () => {
+        const tool = findTool('create_invite');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                channel_id: CHANNEL,
+                max_uses: 10,
+                max_age: 3600,
+                temporary: true,
+                unique: false,
+            },
+            provider,
+        );
+        expect(provider.createInvite).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            maxUses: 10,
+            maxAge: 3600,
+            temporary: true,
+            unique: false,
+        });
+    });
+
+    it('create_invite accepts only channel_id', async () => {
+        const tool = findTool('create_invite');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.createInvite).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            maxUses: undefined,
+            maxAge: undefined,
+            temporary: undefined,
+            unique: undefined,
+        });
+    });
+
+    it('create_invite schema rejects non-number max_uses', () => {
+        const tool = findTool('create_invite');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, max_uses: 'lots' })).toThrow();
+    });
+
+    it('delete_invite returns success payload and passes reason', async () => {
+        const tool = findTool('delete_invite');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ code: CODE, reason: 'revoked' }, provider);
+        expect(provider.deleteInvite).toHaveBeenCalledWith(CODE, 'revoked');
+        expect(result).toEqual({ success: true, code: CODE });
+    });
+});
+
+describe('dm tools', () => {
+    const USER = '567890123456789012';
+
+    it('send_dm calls provider.sendDM with camelCase fields', async () => {
+        const tool = findTool('send_dm');
+        const provider = makeStubProvider();
+        await tool.handler({ user_id: USER, content: 'hi' }, provider);
+        expect(provider.sendDM).toHaveBeenCalledWith({
+            userId: USER,
+            content: 'hi',
+            embeds: undefined,
+        });
+    });
+
+    it('send_dm accepts embeds without content', async () => {
+        const tool = findTool('send_dm');
+        const provider = makeStubProvider();
+        await tool.handler({ user_id: USER, embeds: [{ title: 'hi' }] }, provider);
+        expect(provider.sendDM).toHaveBeenCalledWith({
+            userId: USER,
+            content: undefined,
+            embeds: [{ title: 'hi' }],
+        });
+    });
+
+    it('send_dm schema rejects missing user_id', () => {
+        const tool = findTool('send_dm');
+        expect(() => tool.schema.parse({ content: 'hi' })).toThrow();
+    });
+});
+
+describe('scheduled event tools', () => {
+    const GUILD = '123456789012345678';
+    const EVENT = '234567890123456789';
+    const CHANNEL = '345678901234567890';
+    const START = '2030-01-01T00:00:00Z';
+    const END = '2030-01-01T02:00:00Z';
+
+    it('list_scheduled_events calls provider.listScheduledEvents with guild_id', async () => {
+        const tool = findTool('list_scheduled_events');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.listScheduledEvents).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('list_scheduled_events schema rejects missing guild_id', () => {
+        const tool = findTool('list_scheduled_events');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('get_scheduled_event passes guild_id and event_id', async () => {
+        const tool = findTool('get_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, event_id: EVENT }, provider);
+        expect(provider.getScheduledEvent).toHaveBeenCalledWith(GUILD, EVENT);
+    });
+
+    it('create_scheduled_event transforms snake_case to camelCase and maps entity_type to uppercase', async () => {
+        const tool = findTool('create_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                name: 'Raid Night',
+                entity_type: 'voice',
+                scheduled_start_time: START,
+                channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
+                description: 'Come hang out',
+            },
+            provider,
+        );
+        expect(provider.createScheduledEvent).toHaveBeenCalledWith({
+            guildId: GUILD,
+            name: 'Raid Night',
+            entityType: 'VOICE',
+            scheduledStartTime: START,
+            scheduledEndTime: undefined,
+            description: 'Come hang out',
+            channelId: CHANNEL,
+            location: undefined,
+            privacyLevel: 'GUILD_ONLY',
+        });
+    });
+
+    it('create_scheduled_event accepts external with location and end time', async () => {
+        const tool = findTool('create_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                name: 'Meetup',
+                entity_type: 'external',
+                scheduled_start_time: START,
+                scheduled_end_time: END,
+                location: 'Central Park',
+                privacy_level: 'GUILD_ONLY',
+            },
+            provider,
+        );
+        expect(provider.createScheduledEvent).toHaveBeenCalledWith({
+            guildId: GUILD,
+            name: 'Meetup',
+            entityType: 'EXTERNAL',
+            scheduledStartTime: START,
+            scheduledEndTime: END,
+            description: undefined,
+            channelId: undefined,
+            location: 'Central Park',
+            privacyLevel: 'GUILD_ONLY',
+        });
+    });
+
+    it('create_scheduled_event schema rejects invalid entity_type', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'bogus',
+                scheduled_start_time: START,
+            }),
+        ).toThrow();
+    });
+
+    it('create_scheduled_event schema rejects voice/stage without channel_id', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'voice',
+                scheduled_start_time: START,
+            }),
+        ).toThrow();
+    });
+
+    it('create_scheduled_event schema rejects external without location', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'external',
+                scheduled_start_time: START,
+                scheduled_end_time: END,
+            }),
+        ).toThrow();
+    });
+
+    it('create_scheduled_event schema rejects external without scheduled_end_time', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'external',
+                scheduled_start_time: START,
+                location: 'Somewhere',
+            }),
+        ).toThrow();
+    });
+
+    it('edit_scheduled_event forwards only provided fields', async () => {
+        const tool = findTool('edit_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                event_id: EVENT,
+                name: 'New Name',
+                description: 'Updated',
+            },
+            provider,
+        );
+        expect(provider.editScheduledEvent).toHaveBeenCalledWith({
+            guildId: GUILD,
+            eventId: EVENT,
+            name: 'New Name',
+            description: 'Updated',
+            entityType: undefined,
+            scheduledStartTime: undefined,
+            scheduledEndTime: undefined,
+            channelId: undefined,
+            location: undefined,
+            privacyLevel: undefined,
+        });
+    });
+
+    it('delete_scheduled_event returns success payload', async () => {
+        const tool = findTool('delete_scheduled_event');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ guild_id: GUILD, event_id: EVENT }, provider);
+        expect(provider.deleteScheduledEvent).toHaveBeenCalledWith(GUILD, EVENT);
+        expect(result).toEqual({ success: true, event_id: EVENT });
+    });
+
+    it('get_event_subscribers passes guild_id, event_id, and optional limit', async () => {
+        const tool = findTool('get_event_subscribers');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, event_id: EVENT, limit: 50 }, provider);
+        expect(provider.getEventSubscribers).toHaveBeenCalledWith(GUILD, EVENT, 50);
+    });
+
+    it('get_event_subscribers rejects limit greater than 100', () => {
+        const tool = findTool('get_event_subscribers');
+        expect(() => tool.schema.parse({ guild_id: GUILD, event_id: EVENT, limit: 101 })).toThrow();
+    });
+
+    it('create_event_invite calls provider.createEventInvite with guild/event/channel', async () => {
+        const tool = findTool('create_event_invite');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, event_id: EVENT, channel_id: CHANNEL },
+            provider,
+        );
+        expect(provider.createEventInvite).toHaveBeenCalledWith(GUILD, EVENT, CHANNEL);
+        expect(result).toEqual({ code: 'abc', url: 'https://discord.gg/abc?event=ev1', eventId: 'ev1' });
     });
 });

@@ -8,10 +8,14 @@
 
 import {
     ChannelType as DjsChannelType,
+    GuildScheduledEventEntityType,
+    GuildScheduledEventStatus,
     type Guild,
     type GuildBasedChannel,
     type GuildForumTag,
     type GuildMember,
+    type GuildScheduledEvent,
+    type Invite as DjsInvite,
     type Message,
     type Role,
     type ThreadChannel,
@@ -28,8 +32,14 @@ import {
     type DiscordMessage,
     type DiscordRole,
     type DiscordUser,
+    type EventEntityType,
+    type EventStatus,
     type ForumPost,
     type ForumTag,
+    type Invite,
+    type ScheduledEvent,
+    type ScreeningField,
+    type WelcomeScreen,
 } from '../types/discord.js';
 
 // ─── Channel Type Mapping ───────────────────────────────────────
@@ -205,6 +215,39 @@ export function mapRole(role: Role): DiscordRole {
     };
 }
 
+// ─── Welcome Screen / Membership Screening ─────────────────────
+
+export function mapWelcomeScreen(welcomeScreen: any): WelcomeScreen {
+    const channels = welcomeScreen?.welcomeChannels;
+    const list: any[] = channels
+        ? (typeof channels.values === 'function' ? Array.from(channels.values()) : Array.from(channels))
+        : [];
+    return {
+        description: welcomeScreen?.description ?? null,
+        welcomeChannels: list.map((wc: any): ScreeningField => {
+            const emoji = wc?.emoji ?? null;
+            return {
+                channelId: wc?.channelId ?? wc?.channel_id ?? '',
+                description: wc?.description ?? '',
+                emojiName: emoji?.name ?? null,
+                emojiId: emoji?.id ?? null,
+            };
+        }),
+    };
+}
+
+export function mapApiWelcomeScreen(raw: any): WelcomeScreen {
+    return {
+        description: raw?.description ?? null,
+        welcomeChannels: (raw?.welcome_channels ?? []).map((wc: any): ScreeningField => ({
+            channelId: wc.channel_id,
+            description: wc.description ?? '',
+            emojiName: wc.emoji_name ?? null,
+            emojiId: wc.emoji_id ?? null,
+        })),
+    };
+}
+
 // ─── API Message ────────────────────────────────────
 
 /**
@@ -305,5 +348,117 @@ export function mapApiForumPost(thread: any, fallbackGuildId?: string): ForumPos
         createdAt: metadata.create_timestamp
             ?? new Date(Number(BigInt(thread.id) >> 22n) + 1420070400000).toISOString(),
         autoArchiveDuration: metadata.auto_archive_duration ?? null,
+    };
+}
+
+// ─── Invite ────────────────────────────────────────────────────
+
+export function mapInvite(invite: DjsInvite): Invite {
+    const channel = invite.channel;
+    return {
+        code: invite.code,
+        url: invite.url,
+        channelId: invite.channelId ?? channel?.id ?? null,
+        channelName: (channel && 'name' in channel ? channel.name : null) ?? null,
+        guildId: invite.guild?.id ?? null,
+        inviterId: invite.inviterId ?? null,
+        inviterName: invite.inviter?.username ?? null,
+        uses: invite.uses ?? null,
+        maxUses: invite.maxUses ?? null,
+        maxAge: invite.maxAge ?? null,
+        temporary: invite.temporary ?? false,
+        createdAt: invite.createdAt?.toISOString() ?? null,
+        expiresAt: invite.expiresAt?.toISOString() ?? null,
+        approximateMemberCount: invite.memberCount ?? null,
+        approximatePresenceCount: invite.presenceCount ?? null,
+    };
+}
+
+export function mapApiInvite(raw: any): Invite {
+    const code: string = raw.code;
+    return {
+        code,
+        url: `https://discord.gg/${code}`,
+        channelId: raw.channel?.id ?? raw.channel_id ?? null,
+        channelName: raw.channel?.name ?? null,
+        guildId: raw.guild?.id ?? raw.guild_id ?? null,
+        inviterId: raw.inviter?.id ?? null,
+        inviterName: raw.inviter?.username ?? null,
+        uses: raw.uses ?? null,
+        maxUses: raw.max_uses ?? null,
+        maxAge: raw.max_age ?? null,
+        temporary: raw.temporary ?? false,
+        createdAt: raw.created_at ?? null,
+        expiresAt: raw.expires_at ?? null,
+        approximateMemberCount: raw.approximate_member_count ?? null,
+        approximatePresenceCount: raw.approximate_presence_count ?? null,
+    };
+}
+
+// ─── Scheduled Events ───────────────────────────────────────────
+
+function mapEventEntityType(type: GuildScheduledEventEntityType | number): EventEntityType {
+    switch (type) {
+        case GuildScheduledEventEntityType.StageInstance:
+            return 'STAGE_INSTANCE';
+        case GuildScheduledEventEntityType.Voice:
+            return 'VOICE';
+        case GuildScheduledEventEntityType.External:
+        default:
+            return 'EXTERNAL';
+    }
+}
+
+function mapEventStatus(status: GuildScheduledEventStatus | number): EventStatus {
+    switch (status) {
+        case GuildScheduledEventStatus.Active:
+            return 'ACTIVE';
+        case GuildScheduledEventStatus.Completed:
+            return 'COMPLETED';
+        case GuildScheduledEventStatus.Canceled:
+            return 'CANCELED';
+        case GuildScheduledEventStatus.Scheduled:
+        default:
+            return 'SCHEDULED';
+    }
+}
+
+export function mapScheduledEvent(event: GuildScheduledEvent): ScheduledEvent {
+    return {
+        id: event.id,
+        guildId: event.guildId,
+        channelId: event.channelId,
+        creatorId: event.creatorId,
+        name: event.name,
+        description: event.description,
+        scheduledStartTime: event.scheduledStartAt?.toISOString() ?? new Date(event.scheduledStartTimestamp ?? 0).toISOString(),
+        scheduledEndTime: event.scheduledEndAt?.toISOString() ?? null,
+        privacyLevel: 'GUILD_ONLY',
+        status: mapEventStatus(event.status),
+        entityType: mapEventEntityType(event.entityType),
+        entityId: event.entityId,
+        location: event.entityMetadata?.location ?? null,
+        userCount: event.userCount ?? 0,
+        image: event.image ?? null,
+    };
+}
+
+export function mapApiScheduledEvent(raw: any): ScheduledEvent {
+    return {
+        id: raw.id,
+        guildId: raw.guild_id,
+        channelId: raw.channel_id ?? null,
+        creatorId: raw.creator_id ?? null,
+        name: raw.name,
+        description: raw.description ?? null,
+        scheduledStartTime: raw.scheduled_start_time,
+        scheduledEndTime: raw.scheduled_end_time ?? null,
+        privacyLevel: 'GUILD_ONLY',
+        status: mapEventStatus(raw.status),
+        entityType: mapEventEntityType(raw.entity_type),
+        entityId: raw.entity_id ?? null,
+        location: raw.entity_metadata?.location ?? null,
+        userCount: raw.user_count ?? 0,
+        image: raw.image ?? null,
     };
 }

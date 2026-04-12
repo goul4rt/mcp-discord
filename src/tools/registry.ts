@@ -640,28 +640,268 @@ const forumTools: ToolDefinition[] = [
 ];
 
 // ═════════════════════════════════════════════════════════════════
-// INVITE TOOLS — populated by PR 4 (feat/invites-dms)
+// INVITE TOOLS
 // ═════════════════════════════════════════════════════════════════
 
-const inviteTools: ToolDefinition[] = [];
+const inviteTools: ToolDefinition[] = [
+    {
+        name: 'list_invites',
+        description: 'List all active invites in a server. Returns invite code, URL, channel, inviter, uses, and expiry info.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+        }),
+        handler: async (input, provider) => provider.listInvites(input.guild_id),
+    },
+    {
+        name: 'list_channel_invites',
+        description: 'List active invites for a specific channel.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The channel ID'),
+        }),
+        handler: async (input, provider) => provider.listChannelInvites(input.channel_id),
+    },
+    {
+        name: 'get_invite',
+        description: 'Get details about an invite by its code, including approximate member and presence counts when available.',
+        schema: z.object({
+            code: z.string().describe('The invite code (the part after discord.gg/)'),
+        }),
+        handler: async (input, provider) => provider.getInvite(input.code),
+    },
+    {
+        name: 'create_invite',
+        description: 'Create a new invite for a channel. Supports max uses, max age (seconds), temporary membership, and uniqueness.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The channel to create the invite for'),
+            max_uses: z.number().min(0).max(100).optional().describe('Maximum number of uses (0 = unlimited)'),
+            max_age: z.number().min(0).optional().describe('Duration in seconds before expiry (0 = never)'),
+            temporary: z.boolean().optional().describe('Whether the invite grants temporary membership'),
+            unique: z.boolean().optional().describe('If true, always create a new invite even if one with identical settings exists'),
+        }),
+        handler: async (input, provider) => provider.createInvite({
+            channelId: input.channel_id,
+            maxUses: input.max_uses,
+            maxAge: input.max_age,
+            temporary: input.temporary,
+            unique: input.unique,
+        }),
+    },
+    {
+        name: 'delete_invite',
+        description: 'Revoke an invite by its code.',
+        schema: z.object({
+            code: z.string().describe('The invite code to revoke'),
+            reason: z.string().optional().describe('Reason (audit log)'),
+        }),
+        handler: async (input, provider) => {
+            await provider.deleteInvite(input.code, input.reason);
+            return { success: true, code: input.code };
+        },
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
-// DM TOOLS — populated by PR 4 (feat/invites-dms)
+// DM TOOLS
 // ═════════════════════════════════════════════════════════════════
 
-const dmTools: ToolDefinition[] = [];
+const dmTools: ToolDefinition[] = [
+    {
+        name: 'send_dm',
+        description: 'Send a direct message to a user. Works for users who share a server with the bot and have DMs enabled. Supports plain text and rich embeds.',
+        schema: z.object({
+            user_id: snowflakeId.describe('The user to DM'),
+            content: z.string().optional().describe('Text content of the message'),
+            embeds: z.array(embedSchema).optional().describe('Rich embed objects'),
+        }),
+        handler: async (input, provider) => provider.sendDM({
+            userId: input.user_id,
+            content: input.content,
+            embeds: input.embeds,
+        }),
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
-// SCHEDULED EVENT TOOLS — populated by PR 5 (feat/scheduled-events)
+// SCHEDULED EVENT TOOLS
 // ═════════════════════════════════════════════════════════════════
 
-const scheduledEventTools: ToolDefinition[] = [];
+const entityTypeMap = { voice: 'VOICE', stage: 'STAGE_INSTANCE', external: 'EXTERNAL' } as const;
+
+const createScheduledEventSchema = z
+    .object({
+        guild_id: snowflakeId.describe('The server (guild) ID'),
+        name: z.string().describe('Event name'),
+        entity_type: z.enum(['voice', 'stage', 'external']).describe('Event hosting type'),
+        scheduled_start_time: z.string().describe('ISO 8601 start timestamp'),
+        scheduled_end_time: z.string().optional().describe('ISO 8601 end timestamp (required for external)'),
+        description: z.string().optional().describe('Event description'),
+        channel_id: snowflakeId.optional().describe('Voice/stage channel ID (required for voice/stage)'),
+        location: z.string().optional().describe('Physical or URL location (required for external)'),
+        privacy_level: z.literal('GUILD_ONLY').default('GUILD_ONLY').describe('Privacy level'),
+    })
+    .superRefine((data, ctx) => {
+        if (data.entity_type === 'external') {
+            if (!data.location) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: 'location is required when entity_type is external',
+                    path: ['location'],
+                });
+            }
+            if (!data.scheduled_end_time) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: 'scheduled_end_time is required when entity_type is external',
+                    path: ['scheduled_end_time'],
+                });
+            }
+        } else if (!data.channel_id) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `channel_id is required when entity_type is ${data.entity_type}`,
+                path: ['channel_id'],
+            });
+        }
+    });
+
+const scheduledEventTools: ToolDefinition[] = [
+    {
+        name: 'list_scheduled_events',
+        description: 'List all scheduled events in a server. Returns voice, stage, and external events with their start times, status, and subscriber counts.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+        }),
+        handler: async (input, provider) => provider.listScheduledEvents(input.guild_id),
+    },
+    {
+        name: 'get_scheduled_event',
+        description: 'Get detailed information about a specific scheduled event including its status, location, and subscriber count.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+            event_id: snowflakeId.describe('The scheduled event ID'),
+        }),
+        handler: async (input, provider) => provider.getScheduledEvent(input.guild_id, input.event_id),
+    },
+    {
+        name: 'create_scheduled_event',
+        description: 'Create a voice, stage, or external scheduled event in a server. Voice and stage events require a channel_id; external events require location and scheduled_end_time.',
+        schema: createScheduledEventSchema,
+        handler: async (input, provider) => provider.createScheduledEvent({
+            guildId: input.guild_id,
+            name: input.name,
+            entityType: entityTypeMap[input.entity_type as 'voice' | 'stage' | 'external'],
+            scheduledStartTime: input.scheduled_start_time,
+            scheduledEndTime: input.scheduled_end_time,
+            description: input.description,
+            channelId: input.channel_id,
+            location: input.location,
+            privacyLevel: input.privacy_level,
+        }),
+    },
+    {
+        name: 'edit_scheduled_event',
+        description: 'Edit an existing scheduled event. All fields are optional — only provided fields are updated.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+            event_id: snowflakeId.describe('The scheduled event ID'),
+            name: z.string().optional().describe('New event name'),
+            entity_type: z.enum(['voice', 'stage', 'external']).optional().describe('New hosting type'),
+            scheduled_start_time: z.string().optional().describe('New ISO 8601 start timestamp'),
+            scheduled_end_time: z.string().optional().describe('New ISO 8601 end timestamp'),
+            description: z.string().optional().describe('New description'),
+            channel_id: snowflakeId.optional().describe('New voice/stage channel ID'),
+            location: z.string().optional().describe('New location for external events'),
+            privacy_level: z.literal('GUILD_ONLY').optional().describe('Privacy level'),
+        }),
+        handler: async (input, provider) => provider.editScheduledEvent({
+            guildId: input.guild_id,
+            eventId: input.event_id,
+            name: input.name,
+            entityType: input.entity_type ? entityTypeMap[input.entity_type as 'voice' | 'stage' | 'external'] : undefined,
+            scheduledStartTime: input.scheduled_start_time,
+            scheduledEndTime: input.scheduled_end_time,
+            description: input.description,
+            channelId: input.channel_id,
+            location: input.location,
+            privacyLevel: input.privacy_level,
+        }),
+    },
+    {
+        name: 'delete_scheduled_event',
+        description: 'Delete a scheduled event. This cannot be undone.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+            event_id: snowflakeId.describe('The scheduled event ID'),
+        }),
+        handler: async (input, provider) => {
+            await provider.deleteScheduledEvent(input.guild_id, input.event_id);
+            return { success: true, event_id: input.event_id };
+        },
+    },
+    {
+        name: 'get_event_subscribers',
+        description: 'Get users who marked themselves as "Interested" in a scheduled event.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+            event_id: snowflakeId.describe('The scheduled event ID'),
+            limit: z.number().min(1).max(100).optional().describe('Max subscribers to fetch (1-100)'),
+        }),
+        handler: async (input, provider) => provider.getEventSubscribers(input.guild_id, input.event_id, input.limit),
+    },
+    {
+        name: 'create_event_invite',
+        description: 'Create an invite link associated with a scheduled event. The URL includes ?event=<id> so recipients see event details on Discord.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+            event_id: snowflakeId.describe('The scheduled event ID'),
+            channel_id: snowflakeId.describe('The channel to anchor the invite to'),
+        }),
+        handler: async (input, provider) => provider.createEventInvite(input.guild_id, input.event_id, input.channel_id),
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
 // SCREENING TOOLS — populated by PR 6b (feat/screening)
 // ═════════════════════════════════════════════════════════════════
 
-const screeningTools: ToolDefinition[] = [];
+const welcomeChannelSchema = z.object({
+    channel_id: snowflakeId.describe('The channel shown in the welcome screen'),
+    description: z.string().describe('Short description displayed next to the channel'),
+    emoji_name: z.string().nullable().optional().describe('Unicode emoji or custom emoji name'),
+    emoji_id: snowflakeId.nullable().optional().describe('Custom emoji ID, if applicable'),
+});
+
+const screeningTools: ToolDefinition[] = [
+    {
+        name: 'get_membership_screening',
+        description: 'Get the welcome screen / membership screening form for a Community server. Returns the description and featured welcome channels shown to new members.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The Discord server (guild) ID'),
+        }),
+        handler: async (input, provider) => provider.getWelcomeScreen(input.guild_id),
+    },
+    {
+        name: 'update_membership_screening',
+        description: 'Update the welcome screen for new members. Can enable/disable the screen, change the description, and set up to 5 featured welcome channels. All fields are optional; only provided fields are modified.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The Discord server (guild) ID'),
+            enabled: z.boolean().optional().describe('Whether the welcome screen is enabled'),
+            description: z.string().optional().describe('Server description shown in the welcome screen (up to 140 chars)'),
+            welcome_channels: z.array(welcomeChannelSchema).max(5).optional().describe('Up to 5 featured channels shown to new members'),
+        }),
+        handler: async (input, provider) => provider.updateWelcomeScreen({
+            guildId: input.guild_id,
+            enabled: input.enabled,
+            description: input.description,
+            welcomeChannels: input.welcome_channels?.map((wc: any) => ({
+                channelId: wc.channel_id,
+                description: wc.description,
+                emojiName: wc.emoji_name ?? null,
+                emojiId: wc.emoji_id ?? null,
+            })),
+        }),
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
 // ALL TOOLS — flat registry

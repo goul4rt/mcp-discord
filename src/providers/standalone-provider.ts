@@ -38,6 +38,7 @@ import type {
     BanOptions,
     CreateChannelOptions,
     CreateForumPostOptions,
+    CreateInviteOptions,
     CreateRoleOptions,
     CreateThreadOptions,
     DiscordChannel,
@@ -53,17 +54,27 @@ import type {
     ForumPost,
     ForumTag,
     ForumTagInput,
+    Invite,
     KickOptions,
     PaginatedResult,
     ReadMessagesOptions,
     ReplyToForumOptions,
+    ScheduledEvent,
     SearchMessagesOptions,
     SendMessageOptions,
     TimeoutOptions,
     UpdateForumPostOptions,
     ChannelType,
+    UpdateWelcomeScreenOptions,
+    WelcomeScreen,
 } from '../types/discord.js';
-import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage, mapApiForumPost, mapApiForumTag, mapForumPost, mapForumTag } from '../utils/mappers.js';
+import type { SendDMOptions } from './capabilities/dms.js';
+import type {
+    CreateScheduledEventOptions,
+    EditScheduledEventOptions,
+    ScheduledEventInvite,
+} from './capabilities/scheduledEvents.js';
+import { mapApiForumPost, mapApiForumTag, mapApiInvite, mapApiMessage, mapApiScheduledEvent, mapApiWelcomeScreen, mapChannel, mapChannelSummary, mapChannelType, mapForumPost, mapForumTag, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser } from '../utils/mappers.js';
 
 export class StandaloneProvider implements DiscordProvider {
     readonly name = 'standalone';
@@ -864,15 +875,178 @@ export class StandaloneProvider implements DiscordProvider {
     }
 
     // ─── Invites ─────────────────────────────────────────────────
-    // Methods added by PR 4 (feat/invites-dms).
+
+    async listInvites(guildId: string): Promise<Invite[]> {
+        const invites = (await this.rest.get(Routes.guildInvites(guildId))) as any[];
+        return invites.map(i => mapApiInvite(i));
+    }
+
+    async listChannelInvites(channelId: string): Promise<Invite[]> {
+        const invites = (await this.rest.get(Routes.channelInvites(channelId))) as any[];
+        return invites.map(i => mapApiInvite(i));
+    }
+
+    async getInvite(code: string): Promise<Invite> {
+        const query = new URLSearchParams({ with_counts: 'true' });
+        const invite = (await this.rest.get(Routes.invite(code), { query })) as any;
+        return mapApiInvite(invite);
+    }
+
+    async createInvite(options: CreateInviteOptions): Promise<Invite> {
+        const body: any = {};
+        if (options.maxAge !== undefined) body.max_age = options.maxAge;
+        if (options.maxUses !== undefined) body.max_uses = options.maxUses;
+        if (options.temporary !== undefined) body.temporary = options.temporary;
+        if (options.unique !== undefined) body.unique = options.unique;
+
+        const invite = (await this.rest.post(Routes.channelInvites(options.channelId), { body })) as any;
+        return mapApiInvite(invite);
+    }
+
+    async deleteInvite(code: string, reason?: string): Promise<void> {
+        await this.rest.delete(Routes.invite(code), { reason });
+    }
 
     // ─── DMs ─────────────────────────────────────────────────────
-    // Methods added by PR 4 (feat/invites-dms).
+
+    async sendDM(options: SendDMOptions): Promise<DiscordMessage> {
+        if (this.client) {
+            const user = await this.client.users.fetch(options.userId);
+            const dm = await user.createDM();
+            const payload: any = {};
+            if (options.content) payload.content = options.content;
+            if (options.embeds) payload.embeds = options.embeds;
+            const msg = await dm.send(payload);
+            return mapMessage(msg);
+        }
+        const dmChannel = (await this.rest.post(Routes.userChannels(), {
+            body: { recipient_id: options.userId },
+        })) as { id: string };
+
+        const body: any = {};
+        if (options.content) body.content = options.content;
+        if (options.embeds) body.embeds = options.embeds;
+
+        const msg = (await this.rest.post(Routes.channelMessages(dmChannel.id), { body })) as APIMessage;
+        return mapApiMessage(msg);
+    }
 
     // ─── Scheduled Events ────────────────────────────────────────
-    // Methods added by PR 5 (feat/scheduled-events).
+
+    async listScheduledEvents(guildId: string): Promise<ScheduledEvent[]> {
+        const events = (await this.rest.get(Routes.guildScheduledEvents(guildId))) as any[];
+        return events.map(e => mapApiScheduledEvent(e));
+    }
+
+    async getScheduledEvent(guildId: string, eventId: string): Promise<ScheduledEvent> {
+        const event = (await this.rest.get(Routes.guildScheduledEvent(guildId, eventId))) as any;
+        return mapApiScheduledEvent(event);
+    }
+
+    async createScheduledEvent(options: CreateScheduledEventOptions): Promise<ScheduledEvent> {
+        if (options.entityType === 'EXTERNAL') {
+            if (!options.location) {
+                throw new Error('create_scheduled_event: location is required when entity_type is external');
+            }
+            if (!options.scheduledEndTime) {
+                throw new Error('create_scheduled_event: scheduled_end_time is required when entity_type is external');
+            }
+        } else {
+            if (!options.channelId) {
+                throw new Error(`create_scheduled_event: channel_id is required when entity_type is ${options.entityType.toLowerCase()}`);
+            }
+        }
+
+        const entityTypeNum = options.entityType === 'STAGE_INSTANCE' ? 1
+            : options.entityType === 'VOICE' ? 2
+            : 3;
+
+        const body: any = {
+            name: options.name,
+            scheduled_start_time: options.scheduledStartTime,
+            privacy_level: 2, // GUILD_ONLY
+            entity_type: entityTypeNum,
+        };
+        if (options.scheduledEndTime) body.scheduled_end_time = options.scheduledEndTime;
+        if (options.description) body.description = options.description;
+        if (options.channelId) body.channel_id = options.channelId;
+        if (options.location) body.entity_metadata = { location: options.location };
+
+        const event = (await this.rest.post(Routes.guildScheduledEvents(options.guildId), { body })) as any;
+        return mapApiScheduledEvent(event);
+    }
+
+    async editScheduledEvent(options: EditScheduledEventOptions): Promise<ScheduledEvent> {
+        const body: any = {};
+        if (options.name !== undefined) body.name = options.name;
+        if (options.scheduledStartTime !== undefined) body.scheduled_start_time = options.scheduledStartTime;
+        if (options.scheduledEndTime !== undefined) body.scheduled_end_time = options.scheduledEndTime;
+        if (options.description !== undefined) body.description = options.description;
+        if (options.channelId !== undefined) body.channel_id = options.channelId;
+        if (options.location !== undefined) body.entity_metadata = { location: options.location };
+        if (options.entityType !== undefined) {
+            body.entity_type = options.entityType === 'STAGE_INSTANCE' ? 1
+                : options.entityType === 'VOICE' ? 2
+                : 3;
+        }
+
+        const event = (await this.rest.patch(Routes.guildScheduledEvent(options.guildId, options.eventId), { body })) as any;
+        return mapApiScheduledEvent(event);
+    }
+
+    async deleteScheduledEvent(guildId: string, eventId: string): Promise<void> {
+        await this.rest.delete(Routes.guildScheduledEvent(guildId, eventId));
+    }
+
+    async getEventSubscribers(guildId: string, eventId: string, limit?: number): Promise<DiscordUser[]> {
+        const query = new URLSearchParams();
+        if (limit !== undefined) query.set('limit', String(limit));
+        const subscribers = (await this.rest.get(Routes.guildScheduledEventUsers(guildId, eventId), {
+            query,
+        })) as any[];
+        return subscribers.map(s => ({
+            id: s.user.id,
+            username: s.user.username,
+            displayName: s.user.global_name ?? s.user.username,
+            avatar: s.user.avatar,
+            bot: s.user.bot ?? false,
+            createdAt: new Date(Number(BigInt(s.user.id) >> 22n) + 1420070400000).toISOString(),
+            banner: s.user.banner ?? null,
+        }));
+    }
+
+    async createEventInvite(_guildId: string, eventId: string, channelId: string): Promise<ScheduledEventInvite> {
+        const invite = (await this.rest.post(Routes.channelInvites(channelId), {
+            body: {},
+        })) as { code: string };
+        return {
+            code: invite.code,
+            url: `https://discord.gg/${invite.code}?event=${eventId}`,
+            eventId,
+        };
+    }
 
     // ─── Screening ───────────────────────────────────────────────
-    // Methods added by PR 6b (feat/screening).
+
+    async getWelcomeScreen(guildId: string): Promise<WelcomeScreen> {
+        const raw = await this.rest.get(Routes.guildWelcomeScreen(guildId));
+        return mapApiWelcomeScreen(raw);
+    }
+
+    async updateWelcomeScreen(options: UpdateWelcomeScreenOptions): Promise<WelcomeScreen> {
+        const body: any = {};
+        if (options.enabled !== undefined) body.enabled = options.enabled;
+        if (options.description !== undefined) body.description = options.description;
+        if (options.welcomeChannels !== undefined) {
+            body.welcome_channels = options.welcomeChannels.map(wc => ({
+                channel_id: wc.channelId,
+                description: wc.description,
+                emoji_name: wc.emojiName ?? null,
+                emoji_id: wc.emojiId ?? null,
+            }));
+        }
+        const raw = await this.rest.patch(Routes.guildWelcomeScreen(options.guildId), { body });
+        return mapApiWelcomeScreen(raw);
+    }
 }
 

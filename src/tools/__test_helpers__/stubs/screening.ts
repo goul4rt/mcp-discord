@@ -1,6 +1,9 @@
+import { vi } from 'vitest';
 import type { ScreeningCapability } from '../../../providers/capabilities/screening.js';
 
-// Populated by PR 6b (feat/screening).
 export function makeScreeningStubs(): ScreeningCapability {
-    return {};
+    return {
+        getWelcomeScreen: vi.fn().mockResolvedValue({ description: null, welcomeChannels: [] }),
+        updateWelcomeScreen: vi.fn().mockResolvedValue({ description: null, welcomeChannels: [] }),
+    };
 }
