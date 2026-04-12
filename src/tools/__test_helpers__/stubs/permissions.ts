@@ -1,6 +1,13 @@
+import { vi } from 'vitest';
 import type { PermissionCapability } from '../../../providers/capabilities/permissions.js';
 
-// Populated by PR 1 (feat/permissions).
 export function makePermissionStubs(): PermissionCapability {
-    return {};
+    return {
+        getChannelPermissions: vi.fn().mockResolvedValue([]),
+        setRolePermission: vi.fn().mockResolvedValue(undefined),
+        setMemberPermission: vi.fn().mockResolvedValue(undefined),
+        resetChannelPermissions: vi.fn().mockResolvedValue(undefined),
+        copyPermissions: vi.fn().mockResolvedValue(undefined),
+        auditPermissions: vi.fn().mockResolvedValue([]),
+    };
 }

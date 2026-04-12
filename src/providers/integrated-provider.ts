@@ -20,8 +20,8 @@
  *   // then expose `server` via stdio or HTTP
  */
 
-import type { Client, FetchMessagesOptions, GuildBasedChannel, GuildChannel, GuildMember, TextChannel, Role, ThreadChannel, User } from 'discord.js';
-import { ChannelType as DjsChannelType } from 'discord.js';
+import type { Client, FetchMessagesOptions, ForumChannel, GuildBasedChannel, GuildChannel, GuildMember, TextChannel, Role, ThreadChannel, User } from 'discord.js';
+import { ChannelType as DjsChannelType, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, OverwriteType as DjsOverwriteType, Routes } from 'discord.js';
 
 import type { DiscordProvider, IntegratedProviderConfig } from './discord-provider.js';
 import { assertTextChannel, assertGuildChannel, assertThreadChannel } from '../utils/guards.js';
@@ -29,7 +29,10 @@ import { ProviderDefaults } from './base-provider.js';
 import type {
     AuditLogEntry,
     BanOptions,
+    ChannelPermissionsAudit,
     CreateChannelOptions,
+    CreateForumPostOptions,
+    CreateInviteOptions,
     CreateRoleOptions,
     CreateThreadOptions,
     CreateWebhookOptions,
@@ -45,16 +48,51 @@ import type {
     EditChannelOptions,
     EditWebhookMessageOptions,
     EditWebhookOptions,
+    ForumPost,
+    ForumTag,
+    ForumTagInput,
+    Invite,
     KickOptions,
     PaginatedResult,
+    PermissionOverwrite,
     ReadMessagesOptions,
+    ReplyToForumOptions,
+    ScheduledEvent,
     SearchMessagesOptions,
     SendMessageOptions,
     SendWebhookMessageOptions,
     TimeoutOptions,
+    UpdateForumPostOptions,
+    UpdateWelcomeScreenOptions,
     Webhook,
+    WelcomeScreen,
 } from '../types/discord.js';
-import { mapApiMessage, mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapWebhook } from '../utils/mappers.js';
+import type { SendDMOptions } from './capabilities/dms.js';
+import type {
+    CreateScheduledEventOptions,
+    EditScheduledEventOptions,
+    ScheduledEventInvite,
+} from './capabilities/scheduledEvents.js';
+import {
+    mapApiMessage,
+    mapApiWelcomeScreen,
+    mapChannel,
+    mapChannelSummary,
+    mapForumPost,
+    mapForumTag,
+    mapGuild,
+    mapGuildDetailed,
+    mapInvite,
+    mapMember,
+    mapMessage,
+    mapPermissionOverwrite,
+    mapRole,
+    mapScheduledEvent,
+    mapUser,
+    mapWebhook,
+    mapWelcomeScreen,
+    permissionNamesToBitfield,
+} from '../utils/mappers.js';
 
 export class IntegratedProvider implements DiscordProvider {
     readonly name = 'integrated';
@@ -409,7 +447,85 @@ export class IntegratedProvider implements DiscordProvider {
     }
 
     // ─── Permissions ─────────────────────────────────────────────
-    // Methods added by PR 1 (feat/permissions).
+
+    async getChannelPermissions(channelId: string): Promise<PermissionOverwrite[]> {
+        const channel = await this.client.channels.fetch(channelId);
+        assertGuildChannel(channel, channelId);
+        const guildChannel = channel as GuildChannel;
+        return guildChannel.permissionOverwrites.cache.map(o => mapPermissionOverwrite(o));
+    }
+
+    async setRolePermission(
+        channelId: string,
+        roleId: string,
+        allow: string[],
+        deny: string[],
+    ): Promise<void> {
+        await this.client.rest.put(`/channels/${channelId}/permissions/${roleId}`, {
+            body: {
+                type: 0,
+                allow: permissionNamesToBitfield(allow),
+                deny: permissionNamesToBitfield(deny),
+            },
+        });
+    }
+
+    async setMemberPermission(
+        channelId: string,
+        userId: string,
+        allow: string[],
+        deny: string[],
+    ): Promise<void> {
+        await this.client.rest.put(`/channels/${channelId}/permissions/${userId}`, {
+            body: {
+                type: 1,
+                allow: permissionNamesToBitfield(allow),
+                deny: permissionNamesToBitfield(deny),
+            },
+        });
+    }
+
+    async resetChannelPermissions(channelId: string): Promise<void> {
+        const channel = await this.client.channels.fetch(channelId);
+        assertGuildChannel(channel, channelId);
+        const guildChannel = channel as GuildChannel;
+        const overwriteIds = guildChannel.permissionOverwrites.cache.map(o => o.id);
+        for (const id of overwriteIds) {
+            await this.client.rest.delete(`/channels/${channelId}/permissions/${id}`);
+        }
+    }
+
+    async copyPermissions(sourceChannelId: string, targetChannelId: string): Promise<void> {
+        const source = await this.client.channels.fetch(sourceChannelId);
+        assertGuildChannel(source, sourceChannelId);
+        const sourceChannel = source as GuildChannel;
+        for (const overwrite of sourceChannel.permissionOverwrites.cache.values()) {
+            await this.client.rest.put(`/channels/${targetChannelId}/permissions/${overwrite.id}`, {
+                body: {
+                    type: overwrite.type === DjsOverwriteType.Role ? 0 : 1,
+                    allow: overwrite.allow.bitfield.toString(),
+                    deny: overwrite.deny.bitfield.toString(),
+                },
+            });
+        }
+    }
+
+    async auditPermissions(guildId: string): Promise<ChannelPermissionsAudit[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const channels = await guild.channels.fetch();
+        const result: ChannelPermissionsAudit[] = [];
+        for (const channel of channels.values()) {
+            if (!channel) continue;
+            const overwrites = (channel as GuildChannel).permissionOverwrites?.cache;
+            if (!overwrites) continue;
+            result.push({
+                channelId: channel.id,
+                channelName: channel.name,
+                overwrites: overwrites.map(o => mapPermissionOverwrite(o)),
+            });
+        }
+        return result;
+    }
 
     // ─── Webhooks ────────────────────────────────────────────────
 
@@ -484,17 +600,273 @@ export class IntegratedProvider implements DiscordProvider {
     }
 
     // ─── Forums ──────────────────────────────────────────────────
-    // Methods added by PR 3 (feat/forums).
+
+    async getForumChannels(guildId: string): Promise<DiscordChannelSummary[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const channels = await guild.channels.fetch();
+        return channels
+            .filter((c): c is NonNullable<typeof c> => c !== null && c.type === DjsChannelType.GuildForum)
+            .map(c => mapChannelSummary(c));
+    }
+
+    async createForumPost(options: CreateForumPostOptions): Promise<ForumPost> {
+        const channel = await this.client.channels.fetch(options.channelId);
+        if (!channel || channel.type !== DjsChannelType.GuildForum) {
+            throw new Error(`Channel ${options.channelId} is not a forum channel`);
+        }
+        const forum = channel as ForumChannel;
+        const thread = await forum.threads.create({
+            name: options.name,
+            autoArchiveDuration: options.autoArchiveDuration,
+            message: { content: options.content },
+            appliedTags: options.tagIds,
+        });
+        return mapForumPost(thread);
+    }
+
+    async getForumPost(postId: string): Promise<ForumPost> {
+        const channel = await this.client.channels.fetch(postId);
+        if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+            throw new Error(`Channel ${postId} is not a thread`);
+        }
+        return mapForumPost(channel as ThreadChannel);
+    }
+
+    async listForumThreads(channelId: string, archived?: boolean, limit?: number): Promise<ForumPost[]> {
+        const channel = await this.client.channels.fetch(channelId);
+        if (!channel || channel.type !== DjsChannelType.GuildForum) {
+            throw new Error(`Channel ${channelId} is not a forum channel`);
+        }
+        const forum = channel as ForumChannel;
+        const fetched = archived
+            ? await forum.threads.fetchArchived({ limit })
+            : await forum.threads.fetchActive();
+        const threads = Array.from(fetched.threads.values());
+        const sliced = limit ? threads.slice(0, limit) : threads;
+        return sliced.map(t => mapForumPost(t));
+    }
+
+    async deleteForumPost(postId: string, reason?: string): Promise<void> {
+        const channel = await this.client.channels.fetch(postId);
+        if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+            throw new Error(`Channel ${postId} is not a thread`);
+        }
+        await (channel as ThreadChannel).delete(reason);
+    }
+
+    async getForumTags(channelId: string): Promise<ForumTag[]> {
+        const channel = await this.client.channels.fetch(channelId);
+        if (!channel || channel.type !== DjsChannelType.GuildForum) {
+            throw new Error(`Channel ${channelId} is not a forum channel`);
+        }
+        return (channel as ForumChannel).availableTags.map(t => mapForumTag(t));
+    }
+
+    async setForumTags(channelId: string, tags: ForumTagInput[]): Promise<ForumTag[]> {
+        const channel = await this.client.channels.fetch(channelId);
+        if (!channel || channel.type !== DjsChannelType.GuildForum) {
+            throw new Error(`Channel ${channelId} is not a forum channel`);
+        }
+        const forum = channel as ForumChannel;
+        const updated = await forum.setAvailableTags(tags.map(t => ({
+            name: t.name,
+            moderated: t.moderated,
+            emoji: t.emoji ? { id: t.emoji.id ?? null, name: t.emoji.name ?? null } : null,
+        })));
+        return updated.availableTags.map(t => mapForumTag(t));
+    }
+
+    async updateForumPost(options: UpdateForumPostOptions): Promise<ForumPost> {
+        const channel = await this.client.channels.fetch(options.postId);
+        if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+            throw new Error(`Channel ${options.postId} is not a thread`);
+        }
+        const thread = channel as ThreadChannel;
+        const edited = await thread.edit({
+            name: options.name,
+            archived: options.archived,
+            locked: options.locked,
+            appliedTags: options.appliedTagIds,
+        });
+        return mapForumPost(edited);
+    }
+
+    async replyToForum(options: ReplyToForumOptions): Promise<DiscordMessage> {
+        const channel = await this.client.channels.fetch(options.postId);
+        if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+            throw new Error(`Channel ${options.postId} is not a thread`);
+        }
+        const thread = channel as ThreadChannel;
+        const payload: any = {};
+        if (options.content) payload.content = options.content;
+        if (options.embeds) payload.embeds = options.embeds;
+        const msg = await thread.send(payload);
+        return mapMessage(msg);
+    }
 
     // ─── Invites ─────────────────────────────────────────────────
-    // Methods added by PR 4 (feat/invites-dms).
+
+    async listInvites(guildId: string): Promise<Invite[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const invites = await guild.invites.fetch();
+        return invites.map(i => mapInvite(i));
+    }
+
+    async listChannelInvites(channelId: string): Promise<Invite[]> {
+        const channel = await this.client.channels.fetch(channelId);
+        assertGuildChannel(channel, channelId);
+        const invites = await (channel as any).fetchInvites();
+        return [...invites.values()].map((i: any) => mapInvite(i));
+    }
+
+    async getInvite(code: string): Promise<Invite> {
+        const invite = await this.client.fetchInvite(code);
+        return mapInvite(invite);
+    }
+
+    async createInvite(options: CreateInviteOptions): Promise<Invite> {
+        const channel = await this.client.channels.fetch(options.channelId);
+        assertGuildChannel(channel, options.channelId);
+        const invite = await (channel as any).createInvite({
+            maxUses: options.maxUses,
+            maxAge: options.maxAge,
+            temporary: options.temporary,
+            unique: options.unique,
+        });
+        return mapInvite(invite);
+    }
+
+    async deleteInvite(code: string, reason?: string): Promise<void> {
+        const invite = await this.client.fetchInvite(code);
+        await invite.delete(reason);
+    }
 
     // ─── DMs ─────────────────────────────────────────────────────
-    // Methods added by PR 4 (feat/invites-dms).
+
+    async sendDM(options: SendDMOptions): Promise<DiscordMessage> {
+        const user = await this.client.users.fetch(options.userId);
+        const dm = await user.createDM();
+        const payload: any = {};
+        if (options.content) payload.content = options.content;
+        if (options.embeds) payload.embeds = options.embeds;
+        const msg = await dm.send(payload);
+        return mapMessage(msg);
+    }
 
     // ─── Scheduled Events ────────────────────────────────────────
-    // Methods added by PR 5 (feat/scheduled-events).
+
+    async listScheduledEvents(guildId: string): Promise<ScheduledEvent[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const events = await guild.scheduledEvents.fetch();
+        return events.map(e => mapScheduledEvent(e));
+    }
+
+    async getScheduledEvent(guildId: string, eventId: string): Promise<ScheduledEvent> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const event = await guild.scheduledEvents.fetch(eventId);
+        return mapScheduledEvent(event);
+    }
+
+    async createScheduledEvent(options: CreateScheduledEventOptions): Promise<ScheduledEvent> {
+        if (options.entityType === 'EXTERNAL') {
+            if (!options.location) {
+                throw new Error('create_scheduled_event: location is required when entity_type is external');
+            }
+            if (!options.scheduledEndTime) {
+                throw new Error('create_scheduled_event: scheduled_end_time is required when entity_type is external');
+            }
+        } else {
+            if (!options.channelId) {
+                throw new Error(`create_scheduled_event: channel_id is required when entity_type is ${options.entityType.toLowerCase()}`);
+            }
+        }
+
+        const guild = await this.client.guilds.fetch(options.guildId);
+        const djsType = options.entityType === 'VOICE'
+            ? GuildScheduledEventEntityType.Voice
+            : options.entityType === 'STAGE_INSTANCE'
+                ? GuildScheduledEventEntityType.StageInstance
+                : GuildScheduledEventEntityType.External;
+
+        const createOptions: any = {
+            name: options.name,
+            scheduledStartTime: options.scheduledStartTime,
+            privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
+            entityType: djsType,
+        };
+        if (options.scheduledEndTime) createOptions.scheduledEndTime = options.scheduledEndTime;
+        if (options.description) createOptions.description = options.description;
+        if (options.channelId) createOptions.channel = options.channelId;
+        if (options.location) createOptions.entityMetadata = { location: options.location };
+
+        const event = await guild.scheduledEvents.create(createOptions);
+        return mapScheduledEvent(event);
+    }
+
+    async editScheduledEvent(options: EditScheduledEventOptions): Promise<ScheduledEvent> {
+        const guild = await this.client.guilds.fetch(options.guildId);
+        const editOptions: any = {};
+        if (options.name !== undefined) editOptions.name = options.name;
+        if (options.scheduledStartTime !== undefined) editOptions.scheduledStartTime = options.scheduledStartTime;
+        if (options.scheduledEndTime !== undefined) editOptions.scheduledEndTime = options.scheduledEndTime;
+        if (options.description !== undefined) editOptions.description = options.description;
+        if (options.channelId !== undefined) editOptions.channel = options.channelId;
+        if (options.location !== undefined) editOptions.entityMetadata = { location: options.location };
+        if (options.entityType !== undefined) {
+            editOptions.entityType = options.entityType === 'VOICE'
+                ? GuildScheduledEventEntityType.Voice
+                : options.entityType === 'STAGE_INSTANCE'
+                    ? GuildScheduledEventEntityType.StageInstance
+                    : GuildScheduledEventEntityType.External;
+        }
+        const edited = await guild.scheduledEvents.edit(options.eventId, editOptions);
+        return mapScheduledEvent(edited);
+    }
+
+    async deleteScheduledEvent(guildId: string, eventId: string): Promise<void> {
+        const guild = await this.client.guilds.fetch(guildId);
+        await guild.scheduledEvents.delete(eventId);
+    }
+
+    async getEventSubscribers(guildId: string, eventId: string, limit?: number): Promise<DiscordUser[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const event = await guild.scheduledEvents.fetch(eventId);
+        const subscribers = await event.fetchSubscribers({ limit });
+        return subscribers.map((s: any) => mapUser(s.user as User));
+    }
+
+    async createEventInvite(_guildId: string, eventId: string, channelId: string): Promise<ScheduledEventInvite> {
+        const invite = (await this.client.rest.post(Routes.channelInvites(channelId), {
+            body: {},
+        })) as { code: string };
+        return {
+            code: invite.code,
+            url: `https://discord.gg/${invite.code}?event=${eventId}`,
+            eventId,
+        };
+    }
 
     // ─── Screening ───────────────────────────────────────────────
-    // Methods added by PR 6b (feat/screening).
+
+    async getWelcomeScreen(guildId: string): Promise<WelcomeScreen> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const screen = await guild.fetchWelcomeScreen();
+        return mapWelcomeScreen(screen);
+    }
+
+    async updateWelcomeScreen(options: UpdateWelcomeScreenOptions): Promise<WelcomeScreen> {
+        const body: any = {};
+        if (options.enabled !== undefined) body.enabled = options.enabled;
+        if (options.description !== undefined) body.description = options.description;
+        if (options.welcomeChannels !== undefined) {
+            body.welcome_channels = options.welcomeChannels.map(wc => ({
+                channel_id: wc.channelId,
+                description: wc.description,
+                emoji_name: wc.emojiName ?? null,
+                emoji_id: wc.emojiId ?? null,
+            }));
+        }
+        const raw = await this.client.rest.patch(`/guilds/${options.guildId}/welcome-screen`, { body });
+        return mapApiWelcomeScreen(raw);
+    }
 }

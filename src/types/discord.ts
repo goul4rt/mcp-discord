@@ -274,6 +274,57 @@ export interface EditWebhookMessageOptions {
     embeds?: DiscordEmbed[];
 }
 
+// ─── Invite ─────────────────────────────────────────────────────
+
+export interface Invite {
+    code: string;
+    url: string;
+    channelId: string | null;
+    channelName: string | null;
+    guildId: string | null;
+    inviterId: string | null;
+    inviterName: string | null;
+    uses: number | null;
+    maxUses: number | null;
+    maxAge: number | null;
+    temporary: boolean;
+    createdAt: string | null;
+    expiresAt: string | null;
+    approximateMemberCount: number | null;
+    approximatePresenceCount: number | null;
+}
+
+export interface CreateInviteOptions {
+    channelId: string;
+    maxUses?: number;
+    maxAge?: number;
+    temporary?: boolean;
+    unique?: boolean;
+}
+
+// ─── Scheduled Events ───────────────────────────────────────────
+
+export type EventStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELED';
+export type EventEntityType = 'STAGE_INSTANCE' | 'VOICE' | 'EXTERNAL';
+
+export interface ScheduledEvent {
+    id: string;
+    guildId: string;
+    channelId: string | null;
+    creatorId: string | null;
+    name: string;
+    description: string | null;
+    scheduledStartTime: string;
+    scheduledEndTime: string | null;
+    privacyLevel: 'GUILD_ONLY';
+    status: EventStatus;
+    entityType: EventEntityType;
+    entityId: string | null;
+    location: string | null;
+    userCount: number;
+    image: string | null;
+}
+
 // ─── Pagination ─────────────────────────────────────────────────
 
 export interface PaginatedResult<T> {
@@ -282,4 +333,96 @@ export interface PaginatedResult<T> {
     hasMore: boolean;
     cursor?: string;
     error?: string;
+}
+
+// ─── Channel Permissions ────────────────────────────────────────
+
+export enum OverwriteType {
+    ROLE = 'role',
+    MEMBER = 'member',
+}
+
+export interface PermissionOverwrite {
+    id: string;
+    type: OverwriteType;
+    allow: string[];
+    deny: string[];
+}
+
+export interface ChannelPermissionsAudit {
+    channelId: string;
+    channelName: string;
+    overwrites: PermissionOverwrite[];
+}
+
+// ─── Forum ──────────────────────────────────────────────────────
+
+export interface ForumTag {
+    id: string;
+    name: string;
+    moderated: boolean;
+    emoji: { id: string | null; name: string | null } | null;
+}
+
+export interface ForumTagInput {
+    name: string;
+    emoji?: { id?: string | null; name?: string | null };
+    moderated?: boolean;
+}
+
+export interface ForumPost {
+    id: string;
+    name: string;
+    parentId: string | null;
+    guildId: string | null;
+    ownerId: string | null;
+    archived: boolean;
+    locked: boolean;
+    appliedTagIds: string[];
+    messageCount: number | null;
+    createdAt: string | null;
+    autoArchiveDuration: number | null;
+}
+
+export interface CreateForumPostOptions {
+    channelId: string;
+    name: string;
+    content: string;
+    tagIds?: string[];
+    autoArchiveDuration?: 60 | 1440 | 4320 | 10080;
+}
+
+export interface UpdateForumPostOptions {
+    postId: string;
+    name?: string;
+    archived?: boolean;
+    locked?: boolean;
+    appliedTagIds?: string[];
+}
+
+export interface ReplyToForumOptions {
+    postId: string;
+    content?: string;
+    embeds?: DiscordEmbed[];
+}
+
+// ─── Membership Screening ───────────────────────────────────────
+
+export interface ScreeningField {
+    channelId: string;
+    description: string;
+    emojiName: string | null;
+    emojiId: string | null;
+}
+
+export interface WelcomeScreen {
+    description: string | null;
+    welcomeChannels: ScreeningField[];
+}
+
+export interface UpdateWelcomeScreenOptions {
+    guildId: string;
+    enabled?: boolean;
+    description?: string;
+    welcomeChannels?: ScreeningField[];
 }

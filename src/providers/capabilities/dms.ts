@@ -1,5 +1,11 @@
-// Direct messages to users — populated by PR 4 (feat/invites-dms).
+import type { DiscordEmbed, DiscordMessage } from '../../types/discord.js';
+
+export interface SendDMOptions {
+    userId: string;
+    content?: string;
+    embeds?: DiscordEmbed[];
+}
 
 export interface DMCapability {
-    // Methods added by PR 4: send_dm
+    sendDM(options: SendDMOptions): Promise<DiscordMessage>;
 }

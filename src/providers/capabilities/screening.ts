@@ -1,5 +1,6 @@
-// Membership screening / welcome screen — populated by PR 6b (feat/screening).
+import type { UpdateWelcomeScreenOptions, WelcomeScreen } from '../../types/discord.js';
 
 export interface ScreeningCapability {
-    // Methods added by PR 6b: get_membership_screening, update_membership_screening
+    getWelcomeScreen(guildId: string): Promise<WelcomeScreen>;
+    updateWelcomeScreen(options: UpdateWelcomeScreenOptions): Promise<WelcomeScreen>;
 }

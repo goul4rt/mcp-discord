@@ -1,7 +1,20 @@
-// Webhook management and message execution — populated by PR 2 (feat/webhooks).
+import type {
+    CreateWebhookOptions,
+    DiscordMessage,
+    EditWebhookMessageOptions,
+    EditWebhookOptions,
+    SendWebhookMessageOptions,
+    Webhook,
+} from '../../types/discord.js';
 
 export interface WebhookCapability {
-    // Methods added by PR 2: create_webhook, list_webhooks, edit_webhook,
-    // delete_webhook, send_webhook_message, edit_webhook_message,
-    // delete_webhook_message, fetch_webhook_message
+    createWebhook(options: CreateWebhookOptions): Promise<Webhook>;
+    listWebhooks(scope: 'channel' | 'guild', id: string): Promise<Webhook[]>;
+    editWebhook(options: EditWebhookOptions): Promise<Webhook>;
+    deleteWebhook(webhookId: string, reason?: string): Promise<void>;
+
+    sendWebhookMessage(options: SendWebhookMessageOptions): Promise<DiscordMessage>;
+    editWebhookMessage(options: EditWebhookMessageOptions): Promise<DiscordMessage>;
+    deleteWebhookMessage(webhookId: string, webhookToken: string, messageId: string): Promise<void>;
+    fetchWebhookMessage(webhookId: string, webhookToken: string, messageId: string): Promise<DiscordMessage>;
 }
