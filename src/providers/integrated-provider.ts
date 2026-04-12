@@ -24,10 +24,12 @@ import type { Client, FetchMessagesOptions, ForumChannel, GuildBasedChannel, Gui
 import { ChannelType as DjsChannelType, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, OverwriteType as DjsOverwriteType, Routes } from 'discord.js';
 
 import type { DiscordProvider, IntegratedProviderConfig } from './discord-provider.js';
+import type { EditRoleOptions } from './capabilities/roles.js';
 import { assertTextChannel, assertGuildChannel, assertThreadChannel } from '../utils/guards.js';
 import { ProviderDefaults } from './base-provider.js';
 import type {
     AuditLogEntry,
+    Ban,
     BanOptions,
     ChannelPermissionsAudit,
     CreateChannelOptions,
@@ -76,6 +78,7 @@ import type {
 import {
     mapApiMessage,
     mapApiWelcomeScreen,
+    mapBan,
     mapChannel,
     mapChannelSummary,
     mapForumPost,
@@ -362,6 +365,75 @@ export class IntegratedProvider implements DiscordProvider {
         return members.map(m => mapMember(m));
     }
 
+    async setNickname(guildId: string, userId: string, nickname: string, reason?: string): Promise<void> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const member = await guild.members.fetch(userId);
+        await member.setNickname(nickname || null, reason);
+    }
+
+    async bulkBan(
+        guildId: string,
+        userIds: string[],
+        reason?: string,
+        deleteMessageSeconds?: number
+    ): Promise<{ bannedCount: number; failed: string[] }> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const result = await guild.bans.bulkCreate(userIds, {
+            reason,
+            deleteMessageSeconds,
+        });
+        const banned = (result.bannedUsers ?? []) as string[];
+        const failed = (result.failedUsers ?? []) as string[];
+        return { bannedCount: banned.length, failed };
+    }
+
+    async listBans(guildId: string, limit = 100, after?: string): Promise<PaginatedResult<Ban>> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const bans = await guild.bans.fetch({ limit, after });
+        const items = bans.map(b => mapBan(b));
+        return {
+            items,
+            hasMore: items.length === limit,
+        };
+    }
+
+    async pruneMembers(
+        guildId: string,
+        days: number,
+        includeRoles?: string[],
+        dryRun?: boolean
+    ): Promise<{ prunedCount: number; dryRun: boolean }> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const pruned = await guild.members.prune({
+            days,
+            roles: includeRoles,
+            dry: dryRun ?? false,
+            count: true,
+        });
+        return { prunedCount: pruned ?? 0, dryRun: dryRun ?? false };
+    }
+
+    async getMemberInfo(guildId: string, userId: string): Promise<DiscordMember> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const member = await guild.members.fetch(userId);
+        const base = mapMember(member);
+        const voice = member.voice;
+        return {
+            ...base,
+            premiumSince: member.premiumSince?.toISOString() ?? null,
+            pending: member.pending,
+            voiceState: voice?.channelId
+                ? {
+                    channelId: voice.channelId,
+                    selfMute: voice.selfMute ?? false,
+                    selfDeaf: voice.selfDeaf ?? false,
+                    serverMute: voice.serverMute ?? false,
+                    serverDeaf: voice.serverDeaf ?? false,
+                }
+                : null,
+        };
+    }
+
     // ─── Roles ──────────────────────────────────────────────────
 
     async listRoles(guildId: string): Promise<DiscordRole[]> {
@@ -391,6 +463,53 @@ export class IntegratedProvider implements DiscordProvider {
         const guild = await this.client.guilds.fetch(guildId);
         const member = await guild.members.fetch(userId);
         await member.roles.remove(roleId, reason);
+    }
+
+    async editRole(options: EditRoleOptions): Promise<DiscordRole> {
+        const guild = await this.client.guilds.fetch(options.guildId);
+        const role = await guild.roles.fetch(options.roleId);
+        if (!role) throw new Error(`Role ${options.roleId} not found`);
+        const edited = await role.edit({
+            name: options.name,
+            color: options.color,
+            hoist: options.hoist,
+            mentionable: options.mentionable,
+            permissions: options.permissions as any,
+        });
+        return mapRole(edited);
+    }
+
+    async deleteRole(guildId: string, roleId: string, reason?: string): Promise<void> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const role = await guild.roles.fetch(roleId);
+        if (!role) throw new Error(`Role ${roleId} not found`);
+        await role.delete(reason);
+    }
+
+    async getRoleMembers(guildId: string, roleId: string): Promise<DiscordMember[]> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const role = await guild.roles.fetch(roleId);
+        if (!role) throw new Error(`Role ${roleId} not found`);
+        return role.members.map(m => mapMember(m));
+    }
+
+    async setRolePosition(guildId: string, roleId: string, position: number): Promise<void> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const role = await guild.roles.fetch(roleId);
+        if (!role) throw new Error(`Role ${roleId} not found`);
+        await role.setPosition(position);
+    }
+
+    async setRoleIcon(guildId: string, roleId: string, icon: string): Promise<void> {
+        const guild = await this.client.guilds.fetch(guildId);
+        const role = await guild.roles.fetch(roleId);
+        if (!role) throw new Error(`Role ${roleId} not found`);
+        // Discord API treats unicode emoji via `unicodeEmoji` and image via `icon`.
+        if (/^https?:\/\//i.test(icon)) {
+            await role.edit({ icon });
+        } else {
+            await role.edit({ unicodeEmoji: icon });
+        }
     }
 
     // ─── Moderation ─────────────────────────────────────────────

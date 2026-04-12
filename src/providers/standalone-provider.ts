@@ -17,6 +17,7 @@
 import {
     Client,
     GatewayIntentBits,
+    PermissionFlagsBits,
     REST,
     Routes,
     ChannelType as DjsChannelType,
@@ -31,10 +32,21 @@ import {
     type ThreadChannel,
 } from 'discord.js';
 
+function permissionFlagsToBitfield(flags: string[]): string {
+    let bits = 0n;
+    for (const flag of flags) {
+        const value = (PermissionFlagsBits as Record<string, bigint>)[flag];
+        if (value !== undefined) bits |= value;
+    }
+    return bits.toString();
+}
+
 import type { DiscordProvider, StandaloneProviderConfig } from './discord-provider.js';
+import type { EditRoleOptions } from './capabilities/roles.js';
 import { ProviderDefaults } from './base-provider.js';
 import type {
     AuditLogEntry,
+    Ban,
     BanOptions,
     ChannelPermissionsAudit,
     CreateChannelOptions,
@@ -82,14 +94,17 @@ import type {
     ScheduledEventInvite,
 } from './capabilities/scheduledEvents.js';
 import {
+    mapApiBan,
     mapApiForumPost,
     mapApiForumTag,
     mapApiInvite,
+    mapApiMember,
     mapApiMessage,
     mapApiPermissionOverwrite,
     mapApiScheduledEvent,
     mapApiWebhook,
     mapApiWelcomeScreen,
+    mapBan,
     mapChannel,
     mapChannelSummary,
     mapChannelType,
@@ -615,6 +630,86 @@ export class StandaloneProvider implements DiscordProvider {
         }));
     }
 
+    async setNickname(guildId: string, userId: string, nickname: string, reason?: string): Promise<void> {
+        await this.rest.patch(Routes.guildMember(guildId, userId), {
+            body: { nick: nickname || null },
+            reason,
+        });
+    }
+
+    async bulkBan(
+        guildId: string,
+        userIds: string[],
+        reason?: string,
+        deleteMessageSeconds?: number
+    ): Promise<{ bannedCount: number; failed: string[] }> {
+        const body: any = { user_ids: userIds };
+        if (deleteMessageSeconds !== undefined) body.delete_message_seconds = deleteMessageSeconds;
+        const result = (await this.rest.post(`/guilds/${guildId}/bulk-ban`, {
+            body,
+            reason,
+        })) as any;
+        const banned = (result?.banned_users ?? []) as string[];
+        const failed = (result?.failed_users ?? []) as string[];
+        return { bannedCount: banned.length, failed };
+    }
+
+    async listBans(guildId: string, limit = 100, after?: string): Promise<PaginatedResult<Ban>> {
+        const query = new URLSearchParams({ limit: String(limit) });
+        if (after) query.set('after', after);
+        const bans = (await this.rest.get(Routes.guildBans(guildId), { query })) as any[];
+        const items = bans.map(b => mapApiBan(b));
+        return {
+            items,
+            hasMore: items.length === limit,
+        };
+    }
+
+    async pruneMembers(
+        guildId: string,
+        days: number,
+        includeRoles?: string[],
+        dryRun?: boolean
+    ): Promise<{ prunedCount: number; dryRun: boolean }> {
+        const body: any = { days, compute_prune_count: true };
+        if (includeRoles?.length) body.include_roles = includeRoles;
+        const isDry = dryRun ?? false;
+        const result = isDry
+            ? ((await this.rest.get(Routes.guildPrune(guildId), {
+                query: new URLSearchParams({
+                    days: String(days),
+                    ...(includeRoles?.length ? { include_roles: includeRoles.join(',') } : {}),
+                }),
+            })) as any)
+            : ((await this.rest.post(Routes.guildPrune(guildId), { body })) as any);
+        return { prunedCount: result?.pruned ?? 0, dryRun: isDry };
+    }
+
+    async getMemberInfo(guildId: string, userId: string): Promise<DiscordMember> {
+        if (this.client) {
+            const guild = await this.resolveGuild(guildId);
+            const member = await guild.members.fetch(userId);
+            const base = mapMember(member);
+            const voice = member.voice;
+            return {
+                ...base,
+                premiumSince: member.premiumSince?.toISOString() ?? null,
+                pending: member.pending,
+                voiceState: voice?.channelId
+                    ? {
+                        channelId: voice.channelId,
+                        selfMute: voice.selfMute ?? false,
+                        selfDeaf: voice.selfDeaf ?? false,
+                        serverMute: voice.serverMute ?? false,
+                        serverDeaf: voice.serverDeaf ?? false,
+                    }
+                    : null,
+            };
+        }
+        const m = (await this.rest.get(Routes.guildMember(guildId, userId))) as any;
+        return mapApiMember(m);
+    }
+
     // ─── Roles ──────────────────────────────────────────────────
 
     async listRoles(guildId: string): Promise<DiscordRole[]> {
@@ -672,6 +767,70 @@ export class StandaloneProvider implements DiscordProvider {
 
     async removeRole(guildId: string, userId: string, roleId: string, reason?: string): Promise<void> {
         await this.rest.delete(Routes.guildMemberRole(guildId, userId, roleId), { reason });
+    }
+
+    async editRole(options: EditRoleOptions): Promise<DiscordRole> {
+        const body: any = {};
+        if (options.name !== undefined) body.name = options.name;
+        if (options.color !== undefined) body.color = options.color;
+        if (options.hoist !== undefined) body.hoist = options.hoist;
+        if (options.mentionable !== undefined) body.mentionable = options.mentionable;
+        if (options.permissions !== undefined) {
+            body.permissions = permissionFlagsToBitfield(options.permissions);
+        }
+        const r = (await this.rest.patch(Routes.guildRole(options.guildId, options.roleId), {
+            body,
+        })) as any;
+        return {
+            id: r.id,
+            name: r.name,
+            color: r.color,
+            position: r.position,
+            permissions: r.permissions,
+            mentionable: r.mentionable,
+            managed: r.managed,
+        };
+    }
+
+    async deleteRole(guildId: string, roleId: string, reason?: string): Promise<void> {
+        await this.rest.delete(Routes.guildRole(guildId, roleId), { reason });
+    }
+
+    async getRoleMembers(guildId: string, roleId: string): Promise<DiscordMember[]> {
+        if (this.client) {
+            const guild = await this.resolveGuild(guildId);
+            const role = await guild.roles.fetch(roleId);
+            if (!role) throw new Error(`Role ${roleId} not found`);
+            return role.members.map(m => mapMember(m));
+        }
+        const members: any[] = [];
+        let after: string | undefined;
+        // Paginate through guild members (REST lacks a direct role-members endpoint).
+        for (;;) {
+            const query = new URLSearchParams({ limit: '1000' });
+            if (after) query.set('after', after);
+            const page = (await this.rest.get(Routes.guildMembers(guildId), { query })) as any[];
+            if (page.length === 0) break;
+            for (const m of page) {
+                if ((m.roles ?? []).includes(roleId)) members.push(m);
+            }
+            if (page.length < 1000) break;
+            after = page[page.length - 1].user.id;
+        }
+        return members.map(m => mapApiMember(m));
+    }
+
+    async setRolePosition(guildId: string, roleId: string, position: number): Promise<void> {
+        await this.rest.patch(Routes.guildRoles(guildId), {
+            body: [{ id: roleId, position }],
+        });
+    }
+
+    async setRoleIcon(guildId: string, roleId: string, icon: string): Promise<void> {
+        const body: any = /^https?:\/\//i.test(icon)
+            ? { icon }
+            : { unicode_emoji: icon };
+        await this.rest.patch(Routes.guildRole(guildId, roleId), { body });
     }
 
     // ─── Moderation ─────────────────────────────────────────────

@@ -7,5 +7,10 @@ export function makeMemberStubs(): MemberCapability {
         getMember: vi.fn().mockResolvedValue({}),
         getUser: vi.fn().mockResolvedValue({}),
         searchMembers: vi.fn().mockResolvedValue([]),
+        setNickname: vi.fn().mockResolvedValue(undefined),
+        bulkBan: vi.fn().mockResolvedValue({ bannedCount: 0, failed: [] }),
+        listBans: vi.fn().mockResolvedValue({ items: [], hasMore: false }),
+        pruneMembers: vi.fn().mockResolvedValue({ prunedCount: 0, dryRun: false }),
+        getMemberInfo: vi.fn().mockResolvedValue({}),
     };
 }

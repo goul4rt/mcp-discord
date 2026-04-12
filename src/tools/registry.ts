@@ -348,6 +348,67 @@ const memberTools: ToolDefinition[] = [
         }),
         handler: async (input, provider) => provider.searchMembers(input.guild_id, input.query, input.limit),
     },
+    {
+        name: 'set_nickname',
+        description: 'Set or clear a member\'s nickname. Pass an empty string to clear.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server ID'),
+            user_id: snowflakeId.describe('The user whose nickname to set'),
+            nickname: z.string().describe('New nickname (empty string to clear)'),
+            reason: z.string().optional().describe('Reason (audit log)'),
+        }),
+        handler: async (input, provider) => {
+            await provider.setNickname(input.guild_id, input.user_id, input.nickname, input.reason);
+            return { success: true };
+        },
+    },
+    {
+        name: 'bulk_ban',
+        description: 'Ban multiple users at once. Accepts up to 200 user IDs.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server ID'),
+            user_ids: z.array(snowflakeId).min(1).max(200).describe('Array of user IDs to ban'),
+            reason: z.string().optional().describe('Reason for the bans'),
+            delete_message_seconds: z.number().min(0).max(604800).optional().describe('Delete messages from the last N seconds (0-604800)'),
+        }),
+        handler: async (input, provider) => {
+            const result = await provider.bulkBan(input.guild_id, input.user_ids, input.reason, input.delete_message_seconds);
+            return { success: true, banned_count: result.bannedCount, failed: result.failed };
+        },
+    },
+    {
+        name: 'list_bans',
+        description: 'List banned users in a server with pagination.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server ID'),
+            limit: z.number().min(1).max(1000).default(100).describe('Max bans to fetch'),
+            after: snowflakeId.optional().describe('Fetch bans after this user ID (pagination)'),
+        }),
+        handler: async (input, provider) => provider.listBans(input.guild_id, input.limit, input.after),
+    },
+    {
+        name: 'prune_members',
+        description: 'Remove inactive members who have not logged in within the specified number of days. Use dry_run to preview without removing.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server ID'),
+            days: z.number().min(1).max(30).describe('Number of days of inactivity (1-30)'),
+            include_roles: z.array(snowflakeId).optional().describe('Role IDs to include in the prune (normally only members without roles are pruned)'),
+            dry_run: z.boolean().optional().default(false).describe('If true, returns the count without actually pruning'),
+        }),
+        handler: async (input, provider) => {
+            const result = await provider.pruneMembers(input.guild_id, input.days, input.include_roles, input.dry_run);
+            return { pruned_count: result.prunedCount, dry_run: result.dryRun };
+        },
+    },
+    {
+        name: 'get_member_info',
+        description: 'Get extended member information including voice state, premium (boost) since date, and pending membership screening status.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server ID'),
+            user_id: snowflakeId.describe('The user ID'),
+        }),
+        handler: async (input, provider) => provider.getMemberInfo(input.guild_id, input.user_id),
+    },
 ];
 
 // ═════════════════════════════════════════════════════════════════
@@ -406,6 +467,76 @@ const roleTools: ToolDefinition[] = [
         }),
         handler: async (input, provider) => {
             await provider.removeRole(input.guild_id, input.user_id, input.role_id, input.reason);
+            return { success: true };
+        },
+    },
+    {
+        name: 'edit_role',
+        description: 'Edit a role\'s properties such as name, color, permissions, hoist, and mentionable.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server ID'),
+            role_id: snowflakeId.describe('The role to edit'),
+            name: z.string().optional().describe('New role name'),
+            color: z.number().optional().describe('New role color as decimal'),
+            permissions: permissionFlags.optional().describe('Permission flag names to set'),
+            hoist: z.boolean().optional().describe('Whether the role is displayed separately'),
+            mentionable: z.boolean().optional().describe('Whether the role can be mentioned'),
+        }),
+        handler: async (input, provider) => provider.editRole({
+            guildId: input.guild_id,
+            roleId: input.role_id,
+            name: input.name,
+            color: input.color,
+            permissions: input.permissions,
+            hoist: input.hoist,
+            mentionable: input.mentionable,
+        }),
+    },
+    {
+        name: 'delete_role',
+        description: 'Permanently delete a role from a server.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server ID'),
+            role_id: snowflakeId.describe('The role to delete'),
+            reason: z.string().optional().describe('Reason (audit log)'),
+        }),
+        handler: async (input, provider) => {
+            await provider.deleteRole(input.guild_id, input.role_id, input.reason);
+            return { success: true, role_id: input.role_id };
+        },
+    },
+    {
+        name: 'get_role_members',
+        description: 'List all members who have a specific role.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server ID'),
+            role_id: snowflakeId.describe('The role ID'),
+        }),
+        handler: async (input, provider) => provider.getRoleMembers(input.guild_id, input.role_id),
+    },
+    {
+        name: 'set_role_position',
+        description: 'Change a role\'s position in the role hierarchy.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server ID'),
+            role_id: snowflakeId.describe('The role to reposition'),
+            position: z.number().min(0).describe('New position (0 = bottom)'),
+        }),
+        handler: async (input, provider) => {
+            await provider.setRolePosition(input.guild_id, input.role_id, input.position);
+            return { success: true };
+        },
+    },
+    {
+        name: 'set_role_icon',
+        description: 'Set a role\'s icon to an image URL or a Unicode emoji. Requires the server to have the ROLE_ICONS feature (boost level 2+).',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server ID'),
+            role_id: snowflakeId.describe('The role to set the icon for'),
+            icon: z.string().describe('Image URL or Unicode emoji'),
+        }),
+        handler: async (input, provider) => {
+            await provider.setRoleIcon(input.guild_id, input.role_id, input.icon);
             return { success: true };
         },
     },

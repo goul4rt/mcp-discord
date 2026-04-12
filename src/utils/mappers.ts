@@ -11,6 +11,7 @@ import {
     GuildScheduledEventEntityType,
     GuildScheduledEventStatus,
     PermissionFlagsBits,
+    type GuildBan,
     type Guild,
     type GuildBasedChannel,
     type GuildForumTag,
@@ -28,6 +29,7 @@ import {
 import {
     ChannelType,
     OverwriteType,
+    type Ban,
     type DiscordChannel,
     type DiscordChannelSummary,
     type DiscordGuild,
@@ -177,7 +179,7 @@ export function mapMessage(message: Message): DiscordMessage {
 // ─── Member / User ──────────────────────────────────────────────
 
 export function mapMember(member: GuildMember): DiscordMember {
-    return {
+    const result: DiscordMember = {
         userId: member.id,
         username: member.user.username,
         displayName: member.user.displayName,
@@ -192,6 +194,13 @@ export function mapMember(member: GuildMember): DiscordMember {
         bot: member.user.bot,
         status: member.presence?.status as any ?? 'offline',
     };
+    if ('premiumSince' in member && member.premiumSince !== undefined) {
+        result.premiumSince = member.premiumSince?.toISOString() ?? null;
+    }
+    if ('pending' in member && typeof member.pending === 'boolean') {
+        result.pending = member.pending;
+    }
+    return result;
 }
 
 export function mapUser(user: User): DiscordUser {
@@ -301,6 +310,55 @@ export function mapApiMessage(msg: any, fallbackGuildId?: string): DiscordMessag
     };
 }
 
+// ─── Ban ────────────────────────────────────────────────────────
+
+export function mapBan(ban: GuildBan): Ban {
+    return {
+        userId: ban.user.id,
+        username: ban.user.username,
+        displayName: ban.user.displayName,
+        avatar: ban.user.avatarURL(),
+        reason: ban.reason ?? null,
+    };
+}
+
+export function mapApiBan(raw: any): Ban {
+    const user = raw.user ?? {};
+    return {
+        userId: user.id,
+        username: user.username,
+        displayName: user.global_name ?? user.username,
+        avatar: user.avatar ?? null,
+        reason: raw.reason ?? null,
+    };
+}
+
+// ─── API Member ─────────────────────────────────────────────────
+
+export function mapApiMember(m: any): DiscordMember {
+    const user = m.user ?? {};
+    const result: DiscordMember = {
+        userId: user.id,
+        username: user.username,
+        displayName: user.global_name ?? user.username,
+        nickname: m.nick ?? null,
+        avatar: user.avatar ?? null,
+        roles: (m.roles ?? []).map((roleId: string) => ({
+            id: roleId,
+            name: '',
+            color: 0,
+        })),
+        joinedAt: m.joined_at ?? '',
+        bot: user.bot ?? false,
+    };
+    if (m.premium_since !== undefined) {
+        result.premiumSince = m.premium_since ?? null;
+    }
+    if (typeof m.pending === 'boolean') {
+        result.pending = m.pending;
+    }
+    return result;
+}
 // ─── Channel Permissions ────────────────────────────────────────
 
 // Discord API exposes permissions as SCREAMING_SNAKE_CASE in the MCP schema
