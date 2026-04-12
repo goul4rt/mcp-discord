@@ -53,6 +53,7 @@ import type {
     KickOptions,
     PaginatedResult,
     ReadMessagesOptions,
+    ScheduledEvent,
     SearchMessagesOptions,
     SendMessageOptions,
     TimeoutOptions,
@@ -61,7 +62,12 @@ import type {
     WelcomeScreen,
 } from '../types/discord.js';
 import type { SendDMOptions } from './capabilities/dms.js';
-import { mapApiWelcomeScreen, mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage, mapApiInvite } from '../utils/mappers.js';
+import type {
+    CreateScheduledEventOptions,
+    EditScheduledEventOptions,
+    ScheduledEventInvite,
+} from './capabilities/scheduledEvents.js';
+import { mapApiScheduledEvent, mapApiWelcomeScreen, mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage, mapApiInvite } from '../utils/mappers.js';
 
 export class StandaloneProvider implements DiscordProvider {
     readonly name = 'standalone';
@@ -752,7 +758,99 @@ export class StandaloneProvider implements DiscordProvider {
     }
 
     // ─── Scheduled Events ────────────────────────────────────────
-    // Methods added by PR 5 (feat/scheduled-events).
+
+    async listScheduledEvents(guildId: string): Promise<ScheduledEvent[]> {
+        const events = (await this.rest.get(Routes.guildScheduledEvents(guildId))) as any[];
+        return events.map(e => mapApiScheduledEvent(e));
+    }
+
+    async getScheduledEvent(guildId: string, eventId: string): Promise<ScheduledEvent> {
+        const event = (await this.rest.get(Routes.guildScheduledEvent(guildId, eventId))) as any;
+        return mapApiScheduledEvent(event);
+    }
+
+    async createScheduledEvent(options: CreateScheduledEventOptions): Promise<ScheduledEvent> {
+        if (options.entityType === 'EXTERNAL') {
+            if (!options.location) {
+                throw new Error('create_scheduled_event: location is required when entity_type is external');
+            }
+            if (!options.scheduledEndTime) {
+                throw new Error('create_scheduled_event: scheduled_end_time is required when entity_type is external');
+            }
+        } else {
+            if (!options.channelId) {
+                throw new Error(`create_scheduled_event: channel_id is required when entity_type is ${options.entityType.toLowerCase()}`);
+            }
+        }
+
+        const entityTypeNum = options.entityType === 'STAGE_INSTANCE' ? 1
+            : options.entityType === 'VOICE' ? 2
+            : 3;
+
+        const body: any = {
+            name: options.name,
+            scheduled_start_time: options.scheduledStartTime,
+            privacy_level: 2, // GUILD_ONLY
+            entity_type: entityTypeNum,
+        };
+        if (options.scheduledEndTime) body.scheduled_end_time = options.scheduledEndTime;
+        if (options.description) body.description = options.description;
+        if (options.channelId) body.channel_id = options.channelId;
+        if (options.location) body.entity_metadata = { location: options.location };
+
+        const event = (await this.rest.post(Routes.guildScheduledEvents(options.guildId), { body })) as any;
+        return mapApiScheduledEvent(event);
+    }
+
+    async editScheduledEvent(options: EditScheduledEventOptions): Promise<ScheduledEvent> {
+        const body: any = {};
+        if (options.name !== undefined) body.name = options.name;
+        if (options.scheduledStartTime !== undefined) body.scheduled_start_time = options.scheduledStartTime;
+        if (options.scheduledEndTime !== undefined) body.scheduled_end_time = options.scheduledEndTime;
+        if (options.description !== undefined) body.description = options.description;
+        if (options.channelId !== undefined) body.channel_id = options.channelId;
+        if (options.location !== undefined) body.entity_metadata = { location: options.location };
+        if (options.entityType !== undefined) {
+            body.entity_type = options.entityType === 'STAGE_INSTANCE' ? 1
+                : options.entityType === 'VOICE' ? 2
+                : 3;
+        }
+
+        const event = (await this.rest.patch(Routes.guildScheduledEvent(options.guildId, options.eventId), { body })) as any;
+        return mapApiScheduledEvent(event);
+    }
+
+    async deleteScheduledEvent(guildId: string, eventId: string): Promise<void> {
+        await this.rest.delete(Routes.guildScheduledEvent(guildId, eventId));
+    }
+
+    async getEventSubscribers(guildId: string, eventId: string, limit?: number): Promise<DiscordUser[]> {
+        const query = new URLSearchParams();
+        if (limit !== undefined) query.set('limit', String(limit));
+        const subscribers = (await this.rest.get(Routes.guildScheduledEventUsers(guildId, eventId), {
+            query,
+        })) as any[];
+        return subscribers.map(s => ({
+            id: s.user.id,
+            username: s.user.username,
+            displayName: s.user.global_name ?? s.user.username,
+            avatar: s.user.avatar,
+            bot: s.user.bot ?? false,
+            createdAt: new Date(Number(BigInt(s.user.id) >> 22n) + 1420070400000).toISOString(),
+            banner: s.user.banner ?? null,
+        }));
+    }
+
+    async createEventInvite(_guildId: string, eventId: string, channelId: string): Promise<ScheduledEventInvite> {
+        const invite = (await this.rest.post(Routes.channelInvites(channelId), {
+            body: {},
+        })) as { code: string };
+        return {
+            code: invite.code,
+            url: `https://discord.gg/${invite.code}?event=${eventId}`,
+            eventId,
+        };
+    }
 
     // ─── Screening ───────────────────────────────────────────────
 

@@ -1,7 +1,42 @@
-// Guild scheduled events — populated by PR 5 (feat/scheduled-events).
+import type { DiscordUser, EventEntityType, ScheduledEvent } from '../../types/discord.js';
+
+export interface CreateScheduledEventOptions {
+    guildId: string;
+    name: string;
+    entityType: EventEntityType;
+    scheduledStartTime: string;
+    scheduledEndTime?: string;
+    description?: string;
+    channelId?: string;
+    location?: string;
+    privacyLevel?: 'GUILD_ONLY';
+}
+
+export interface EditScheduledEventOptions {
+    guildId: string;
+    eventId: string;
+    name?: string;
+    entityType?: EventEntityType;
+    scheduledStartTime?: string;
+    scheduledEndTime?: string;
+    description?: string;
+    channelId?: string;
+    location?: string;
+    privacyLevel?: 'GUILD_ONLY';
+}
+
+export interface ScheduledEventInvite {
+    code: string;
+    url: string;
+    eventId: string;
+}
 
 export interface ScheduledEventCapability {
-    // Methods added by PR 5: list_scheduled_events, get_scheduled_event,
-    // create_scheduled_event, edit_scheduled_event, delete_scheduled_event,
-    // get_event_subscribers, create_event_invite
+    listScheduledEvents(guildId: string): Promise<ScheduledEvent[]>;
+    getScheduledEvent(guildId: string, eventId: string): Promise<ScheduledEvent>;
+    createScheduledEvent(options: CreateScheduledEventOptions): Promise<ScheduledEvent>;
+    editScheduledEvent(options: EditScheduledEventOptions): Promise<ScheduledEvent>;
+    deleteScheduledEvent(guildId: string, eventId: string): Promise<void>;
+    getEventSubscribers(guildId: string, eventId: string, limit?: number): Promise<DiscordUser[]>;
+    createEventInvite(guildId: string, eventId: string, channelId: string): Promise<ScheduledEventInvite>;
 }

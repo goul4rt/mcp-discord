@@ -8,9 +8,12 @@
 
 import {
     ChannelType as DjsChannelType,
+    GuildScheduledEventEntityType,
+    GuildScheduledEventStatus,
     type Guild,
     type GuildBasedChannel,
     type GuildMember,
+    type GuildScheduledEvent,
     type Invite as DjsInvite,
     type Message,
     type Role,
@@ -27,7 +30,10 @@ import {
     type DiscordMessage,
     type DiscordRole,
     type DiscordUser,
+    type EventEntityType,
+    type EventStatus,
     type Invite,
+    type ScheduledEvent,
     type ScreeningField,
     type WelcomeScreen,
 } from '../types/discord.js';
@@ -326,5 +332,73 @@ export function mapApiInvite(raw: any): Invite {
         expiresAt: raw.expires_at ?? null,
         approximateMemberCount: raw.approximate_member_count ?? null,
         approximatePresenceCount: raw.approximate_presence_count ?? null,
+    };
+}
+
+// ─── Scheduled Events ───────────────────────────────────────────
+
+function mapEventEntityType(type: GuildScheduledEventEntityType | number): EventEntityType {
+    switch (type) {
+        case GuildScheduledEventEntityType.StageInstance:
+            return 'STAGE_INSTANCE';
+        case GuildScheduledEventEntityType.Voice:
+            return 'VOICE';
+        case GuildScheduledEventEntityType.External:
+        default:
+            return 'EXTERNAL';
+    }
+}
+
+function mapEventStatus(status: GuildScheduledEventStatus | number): EventStatus {
+    switch (status) {
+        case GuildScheduledEventStatus.Active:
+            return 'ACTIVE';
+        case GuildScheduledEventStatus.Completed:
+            return 'COMPLETED';
+        case GuildScheduledEventStatus.Canceled:
+            return 'CANCELED';
+        case GuildScheduledEventStatus.Scheduled:
+        default:
+            return 'SCHEDULED';
+    }
+}
+
+export function mapScheduledEvent(event: GuildScheduledEvent): ScheduledEvent {
+    return {
+        id: event.id,
+        guildId: event.guildId,
+        channelId: event.channelId,
+        creatorId: event.creatorId,
+        name: event.name,
+        description: event.description,
+        scheduledStartTime: event.scheduledStartAt?.toISOString() ?? new Date(event.scheduledStartTimestamp ?? 0).toISOString(),
+        scheduledEndTime: event.scheduledEndAt?.toISOString() ?? null,
+        privacyLevel: 'GUILD_ONLY',
+        status: mapEventStatus(event.status),
+        entityType: mapEventEntityType(event.entityType),
+        entityId: event.entityId,
+        location: event.entityMetadata?.location ?? null,
+        userCount: event.userCount ?? 0,
+        image: event.image ?? null,
+    };
+}
+
+export function mapApiScheduledEvent(raw: any): ScheduledEvent {
+    return {
+        id: raw.id,
+        guildId: raw.guild_id,
+        channelId: raw.channel_id ?? null,
+        creatorId: raw.creator_id ?? null,
+        name: raw.name,
+        description: raw.description ?? null,
+        scheduledStartTime: raw.scheduled_start_time,
+        scheduledEndTime: raw.scheduled_end_time ?? null,
+        privacyLevel: 'GUILD_ONLY',
+        status: mapEventStatus(raw.status),
+        entityType: mapEventEntityType(raw.entity_type),
+        entityId: raw.entity_id ?? null,
+        location: raw.entity_metadata?.location ?? null,
+        userCount: raw.user_count ?? 0,
+        image: raw.image ?? null,
     };
 }

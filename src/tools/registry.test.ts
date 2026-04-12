@@ -76,8 +76,8 @@ describe('snowflake ID schema', () => {
 });
 
 describe('tool registry', () => {
-    it('exposes all 41 tools via allTools', () => {
-        expect(allTools).toHaveLength(41);
+    it('exposes all 48 tools via allTools', () => {
+        expect(allTools).toHaveLength(48);
     });
 
     it('has a unique name per tool', () => {
@@ -167,6 +167,7 @@ describe('channel tools', () => {
         await tool.handler(
             {
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 name: 'renamed',
                 topic: 'new',
                 nsfw: false,
@@ -201,6 +202,7 @@ describe('channel tools', () => {
         await tool.handler(
             {
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 name: 'thread',
                 message_id: MESSAGE,
                 auto_archive_duration: '1440',
@@ -299,6 +301,7 @@ describe('message tools', () => {
                 query: 'hello',
                 author_id: AUTHOR,
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 limit: 10,
             },
             provider,
@@ -794,5 +797,195 @@ describe('dm tools', () => {
     it('send_dm schema rejects missing user_id', () => {
         const tool = findTool('send_dm');
         expect(() => tool.schema.parse({ content: 'hi' })).toThrow();
+    });
+});
+
+describe('scheduled event tools', () => {
+    const GUILD = '123456789012345678';
+    const EVENT = '234567890123456789';
+    const CHANNEL = '345678901234567890';
+    const START = '2030-01-01T00:00:00Z';
+    const END = '2030-01-01T02:00:00Z';
+
+    it('list_scheduled_events calls provider.listScheduledEvents with guild_id', async () => {
+        const tool = findTool('list_scheduled_events');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.listScheduledEvents).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('list_scheduled_events schema rejects missing guild_id', () => {
+        const tool = findTool('list_scheduled_events');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('get_scheduled_event passes guild_id and event_id', async () => {
+        const tool = findTool('get_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, event_id: EVENT }, provider);
+        expect(provider.getScheduledEvent).toHaveBeenCalledWith(GUILD, EVENT);
+    });
+
+    it('create_scheduled_event transforms snake_case to camelCase and maps entity_type to uppercase', async () => {
+        const tool = findTool('create_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                name: 'Raid Night',
+                entity_type: 'voice',
+                scheduled_start_time: START,
+                channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
+                description: 'Come hang out',
+            },
+            provider,
+        );
+        expect(provider.createScheduledEvent).toHaveBeenCalledWith({
+            guildId: GUILD,
+            name: 'Raid Night',
+            entityType: 'VOICE',
+            scheduledStartTime: START,
+            scheduledEndTime: undefined,
+            description: 'Come hang out',
+            channelId: CHANNEL,
+            location: undefined,
+            privacyLevel: 'GUILD_ONLY',
+        });
+    });
+
+    it('create_scheduled_event accepts external with location and end time', async () => {
+        const tool = findTool('create_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                name: 'Meetup',
+                entity_type: 'external',
+                scheduled_start_time: START,
+                scheduled_end_time: END,
+                location: 'Central Park',
+                privacy_level: 'GUILD_ONLY',
+            },
+            provider,
+        );
+        expect(provider.createScheduledEvent).toHaveBeenCalledWith({
+            guildId: GUILD,
+            name: 'Meetup',
+            entityType: 'EXTERNAL',
+            scheduledStartTime: START,
+            scheduledEndTime: END,
+            description: undefined,
+            channelId: undefined,
+            location: 'Central Park',
+            privacyLevel: 'GUILD_ONLY',
+        });
+    });
+
+    it('create_scheduled_event schema rejects invalid entity_type', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'bogus',
+                scheduled_start_time: START,
+            }),
+        ).toThrow();
+    });
+
+    it('create_scheduled_event schema rejects voice/stage without channel_id', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'voice',
+                scheduled_start_time: START,
+            }),
+        ).toThrow();
+    });
+
+    it('create_scheduled_event schema rejects external without location', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'external',
+                scheduled_start_time: START,
+                scheduled_end_time: END,
+            }),
+        ).toThrow();
+    });
+
+    it('create_scheduled_event schema rejects external without scheduled_end_time', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'external',
+                scheduled_start_time: START,
+                location: 'Somewhere',
+            }),
+        ).toThrow();
+    });
+
+    it('edit_scheduled_event forwards only provided fields', async () => {
+        const tool = findTool('edit_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                event_id: EVENT,
+                name: 'New Name',
+                description: 'Updated',
+            },
+            provider,
+        );
+        expect(provider.editScheduledEvent).toHaveBeenCalledWith({
+            guildId: GUILD,
+            eventId: EVENT,
+            name: 'New Name',
+            description: 'Updated',
+            entityType: undefined,
+            scheduledStartTime: undefined,
+            scheduledEndTime: undefined,
+            channelId: undefined,
+            location: undefined,
+            privacyLevel: undefined,
+        });
+    });
+
+    it('delete_scheduled_event returns success payload', async () => {
+        const tool = findTool('delete_scheduled_event');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ guild_id: GUILD, event_id: EVENT }, provider);
+        expect(provider.deleteScheduledEvent).toHaveBeenCalledWith(GUILD, EVENT);
+        expect(result).toEqual({ success: true, event_id: EVENT });
+    });
+
+    it('get_event_subscribers passes guild_id, event_id, and optional limit', async () => {
+        const tool = findTool('get_event_subscribers');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, event_id: EVENT, limit: 50 }, provider);
+        expect(provider.getEventSubscribers).toHaveBeenCalledWith(GUILD, EVENT, 50);
+    });
+
+    it('get_event_subscribers rejects limit greater than 100', () => {
+        const tool = findTool('get_event_subscribers');
+        expect(() => tool.schema.parse({ guild_id: GUILD, event_id: EVENT, limit: 101 })).toThrow();
+    });
+
+    it('create_event_invite calls provider.createEventInvite with guild/event/channel', async () => {
+        const tool = findTool('create_event_invite');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, event_id: EVENT, channel_id: CHANNEL },
+            provider,
+        );
+        expect(provider.createEventInvite).toHaveBeenCalledWith(GUILD, EVENT, CHANNEL);
+        expect(result).toEqual({ code: 'abc', url: 'https://discord.gg/abc?event=ev1', eventId: 'ev1' });
     });
 });
