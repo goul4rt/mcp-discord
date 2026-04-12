@@ -245,6 +245,52 @@ export interface CreateThreadOptions {
     reason?: string;
 }
 
+// ─── Webhook ────────────────────────────────────────────────────
+
+export interface Webhook {
+    id: string;
+    type: number;
+    guildId: string | null;
+    channelId: string | null;
+    name: string | null;
+    avatar: string | null;
+    token: string | null;
+    applicationId: string | null;
+    url: string | null;
+}
+
+export interface CreateWebhookOptions {
+    channelId: string;
+    name: string;
+    avatar?: string;
+    reason?: string;
+}
+
+export interface EditWebhookOptions {
+    webhookId: string;
+    name?: string;
+    avatar?: string;
+    channelId?: string;
+    reason?: string;
+}
+
+export interface SendWebhookMessageOptions {
+    webhookId: string;
+    webhookToken: string;
+    content?: string;
+    embeds?: DiscordEmbed[];
+    username?: string;
+    avatarUrl?: string;
+}
+
+export interface EditWebhookMessageOptions {
+    webhookId: string;
+    webhookToken: string;
+    messageId: string;
+    content?: string;
+    embeds?: DiscordEmbed[];
+}
+
 // ─── Invite ─────────────────────────────────────────────────────
 
 export interface Invite {

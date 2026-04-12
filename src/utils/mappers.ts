@@ -23,6 +23,7 @@ import {
     type Role,
     type ThreadChannel,
     type User,
+    type Webhook as DjsWebhook,
 } from 'discord.js';
 
 import {
@@ -45,6 +46,7 @@ import {
     type PermissionOverwrite,
     type ScheduledEvent,
     type ScreeningField,
+    type Webhook,
     type WelcomeScreen,
 } from '../types/discord.js';
 
@@ -623,5 +625,35 @@ export function mapApiScheduledEvent(raw: any): ScheduledEvent {
         location: raw.entity_metadata?.location ?? null,
         userCount: raw.user_count ?? 0,
         image: raw.image ?? null,
+    };
+}
+
+// ─── Webhook ───────────────────────────────────────────────────
+
+export function mapWebhook(webhook: DjsWebhook): Webhook {
+    return {
+        id: webhook.id,
+        type: webhook.type,
+        guildId: webhook.guildId ?? null,
+        channelId: webhook.channelId ?? null,
+        name: webhook.name ?? null,
+        avatar: webhook.avatar ?? null,
+        token: webhook.token ?? null,
+        applicationId: webhook.applicationId ?? null,
+        url: webhook.url ?? null,
+    };
+}
+
+export function mapApiWebhook(wh: any): Webhook {
+    return {
+        id: wh.id,
+        type: wh.type,
+        guildId: wh.guild_id ?? null,
+        channelId: wh.channel_id ?? null,
+        name: wh.name ?? null,
+        avatar: wh.avatar ?? null,
+        token: wh.token ?? null,
+        applicationId: wh.application_id ?? null,
+        url: wh.url ?? null,
     };
 }

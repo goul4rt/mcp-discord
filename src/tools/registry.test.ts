@@ -77,7 +77,7 @@ describe('snowflake ID schema', () => {
 
 describe('tool registry', () => {
     it('exposes all tools via allTools', () => {
-        expect(allTools).toHaveLength(73);
+        expect(allTools).toHaveLength(81);
     });
 
     it('has a unique name per tool', () => {
@@ -918,6 +918,180 @@ describe('role enhancement tools', () => {
         expect(() => tool.schema.parse({ guild_id: GUILD, role_id: ROLE })).toThrow();
     });
 });
+
+describe('webhook tools', () => {
+    const CHANNEL = '234567890123456789';
+    const WEBHOOK = '345678901234567890';
+    const WEBHOOK_TOKEN = 'abc123token';
+    const MESSAGE = '456789012345678901';
+    const GUILD = '123456789012345678';
+
+    it('create_webhook transforms snake_case to camelCase', async () => {
+        const tool = findTool('create_webhook');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { channel_id: CHANNEL, name: 'my-hook', avatar: 'data:image/png;base64,abc' },
+            provider,
+        );
+        expect(provider.createWebhook).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            name: 'my-hook',
+            avatar: 'data:image/png;base64,abc',
+        });
+    });
+
+    it('create_webhook schema rejects missing name', () => {
+        const tool = findTool('create_webhook');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL })).toThrow();
+    });
+
+    it('create_webhook schema rejects name longer than 80 chars', () => {
+        const tool = findTool('create_webhook');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, name: 'a'.repeat(81) })).toThrow();
+    });
+
+    it('list_webhooks passes scope and id to provider', async () => {
+        const tool = findTool('list_webhooks');
+        const provider = makeStubProvider();
+        await tool.handler({ scope: 'guild', id: GUILD }, provider);
+        expect(provider.listWebhooks).toHaveBeenCalledWith('guild', GUILD);
+    });
+
+    it('list_webhooks passes channel scope', async () => {
+        const tool = findTool('list_webhooks');
+        const provider = makeStubProvider();
+        await tool.handler({ scope: 'channel', id: CHANNEL }, provider);
+        expect(provider.listWebhooks).toHaveBeenCalledWith('channel', CHANNEL);
+    });
+
+    it('list_webhooks schema rejects invalid scope', () => {
+        const tool = findTool('list_webhooks');
+        expect(() => tool.schema.parse({ scope: 'invalid', id: GUILD })).toThrow();
+    });
+
+    it('edit_webhook transforms snake_case to camelCase', async () => {
+        const tool = findTool('edit_webhook');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { webhook_id: WEBHOOK, name: 'renamed', channel_id: CHANNEL },
+            provider,
+        );
+        expect(provider.editWebhook).toHaveBeenCalledWith({
+            webhookId: WEBHOOK,
+            name: 'renamed',
+            avatar: undefined,
+            channelId: CHANNEL,
+        });
+    });
+
+    it('delete_webhook returns success payload and passes reason', async () => {
+        const tool = findTool('delete_webhook');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { webhook_id: WEBHOOK, reason: 'cleanup' },
+            provider,
+        );
+        expect(provider.deleteWebhook).toHaveBeenCalledWith(WEBHOOK, 'cleanup');
+        expect(result).toEqual({ success: true, webhook_id: WEBHOOK });
+    });
+
+    it('send_webhook_message transforms fields and passes to provider', async () => {
+        const tool = findTool('send_webhook_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                webhook_id: WEBHOOK,
+                webhook_token: WEBHOOK_TOKEN,
+                content: 'hello',
+                username: 'Bot',
+                avatar_url: 'https://example.com/avatar.png',
+            },
+            provider,
+        );
+        expect(provider.sendWebhookMessage).toHaveBeenCalledWith({
+            webhookId: WEBHOOK,
+            webhookToken: WEBHOOK_TOKEN,
+            content: 'hello',
+            embeds: undefined,
+            username: 'Bot',
+            avatarUrl: 'https://example.com/avatar.png',
+        });
+    });
+
+    it('send_webhook_message accepts embeds without content', async () => {
+        const tool = findTool('send_webhook_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                webhook_id: WEBHOOK,
+                webhook_token: WEBHOOK_TOKEN,
+                embeds: [{ title: 'test' }],
+            },
+            provider,
+        );
+        expect(provider.sendWebhookMessage).toHaveBeenCalledWith({
+            webhookId: WEBHOOK,
+            webhookToken: WEBHOOK_TOKEN,
+            content: undefined,
+            embeds: [{ title: 'test' }],
+            username: undefined,
+            avatarUrl: undefined,
+        });
+    });
+
+    it('send_webhook_message schema rejects missing webhook_token', () => {
+        const tool = findTool('send_webhook_message');
+        expect(() => tool.schema.parse({ webhook_id: WEBHOOK })).toThrow();
+    });
+
+    it('edit_webhook_message transforms fields and passes to provider', async () => {
+        const tool = findTool('edit_webhook_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                webhook_id: WEBHOOK,
+                webhook_token: WEBHOOK_TOKEN,
+                message_id: MESSAGE,
+                content: 'edited',
+            },
+            provider,
+        );
+        expect(provider.editWebhookMessage).toHaveBeenCalledWith({
+            webhookId: WEBHOOK,
+            webhookToken: WEBHOOK_TOKEN,
+            messageId: MESSAGE,
+            content: 'edited',
+            embeds: undefined,
+        });
+    });
+
+    it('delete_webhook_message returns success and calls provider', async () => {
+        const tool = findTool('delete_webhook_message');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { webhook_id: WEBHOOK, webhook_token: WEBHOOK_TOKEN, message_id: MESSAGE },
+            provider,
+        );
+        expect(provider.deleteWebhookMessage).toHaveBeenCalledWith(WEBHOOK, WEBHOOK_TOKEN, MESSAGE);
+        expect(result).toEqual({ success: true });
+    });
+
+    it('fetch_webhook_message calls provider with correct arguments', async () => {
+        const tool = findTool('fetch_webhook_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { webhook_id: WEBHOOK, webhook_token: WEBHOOK_TOKEN, message_id: MESSAGE },
+            provider,
+        );
+        expect(provider.fetchWebhookMessage).toHaveBeenCalledWith(WEBHOOK, WEBHOOK_TOKEN, MESSAGE);
+    });
+
+    it('fetch_webhook_message schema rejects missing message_id', () => {
+        const tool = findTool('fetch_webhook_message');
+        expect(() => tool.schema.parse({ webhook_id: WEBHOOK, webhook_token: WEBHOOK_TOKEN })).toThrow();
+    });
+});
+
 describe('permission tools', () => {
     const CHANNEL = '234567890123456789';
     const GUILD = '123456789012345678';

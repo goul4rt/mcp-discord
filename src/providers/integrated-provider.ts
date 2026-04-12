@@ -37,6 +37,7 @@ import type {
     CreateInviteOptions,
     CreateRoleOptions,
     CreateThreadOptions,
+    CreateWebhookOptions,
     DiscordChannel,
     DiscordChannelSummary,
     DiscordEmbed,
@@ -47,6 +48,8 @@ import type {
     DiscordRole,
     DiscordUser,
     EditChannelOptions,
+    EditWebhookMessageOptions,
+    EditWebhookOptions,
     ForumPost,
     ForumTag,
     ForumTagInput,
@@ -59,9 +62,11 @@ import type {
     ScheduledEvent,
     SearchMessagesOptions,
     SendMessageOptions,
+    SendWebhookMessageOptions,
     TimeoutOptions,
     UpdateForumPostOptions,
     UpdateWelcomeScreenOptions,
+    Webhook,
     WelcomeScreen,
 } from '../types/discord.js';
 import type { SendDMOptions } from './capabilities/dms.js';
@@ -71,6 +76,7 @@ import type {
     ScheduledEventInvite,
 } from './capabilities/scheduledEvents.js';
 import {
+    mapApiMessage,
     mapApiWelcomeScreen,
     mapBan,
     mapChannel,
@@ -86,6 +92,7 @@ import {
     mapRole,
     mapScheduledEvent,
     mapUser,
+    mapWebhook,
     mapWelcomeScreen,
     permissionNamesToBitfield,
 } from '../utils/mappers.js';
@@ -640,7 +647,76 @@ export class IntegratedProvider implements DiscordProvider {
     }
 
     // ─── Webhooks ────────────────────────────────────────────────
-    // Methods added by PR 2 (feat/webhooks).
+
+    async createWebhook(options: CreateWebhookOptions): Promise<Webhook> {
+        const channel = await this.client.channels.fetch(options.channelId);
+        assertTextChannel(channel, options.channelId);
+        const webhook = await (channel as TextChannel).createWebhook({
+            name: options.name,
+            avatar: options.avatar,
+            reason: options.reason,
+        });
+        return mapWebhook(webhook);
+    }
+
+    async listWebhooks(scope: 'channel' | 'guild', id: string): Promise<Webhook[]> {
+        if (scope === 'guild') {
+            const guild = await this.client.guilds.fetch(id);
+            const webhooks = await guild.fetchWebhooks();
+            return webhooks.map(w => mapWebhook(w));
+        }
+        const channel = await this.client.channels.fetch(id);
+        assertTextChannel(channel, id);
+        const webhooks = await (channel as TextChannel).fetchWebhooks();
+        return webhooks.map(w => mapWebhook(w));
+    }
+
+    async editWebhook(options: EditWebhookOptions): Promise<Webhook> {
+        const webhook = await this.client.fetchWebhook(options.webhookId);
+        const edited = await webhook.edit({
+            name: options.name,
+            avatar: options.avatar,
+            channel: options.channelId,
+            reason: options.reason,
+        });
+        return mapWebhook(edited);
+    }
+
+    async deleteWebhook(webhookId: string, reason?: string): Promise<void> {
+        const webhook = await this.client.fetchWebhook(webhookId);
+        await webhook.delete(reason);
+    }
+
+    async sendWebhookMessage(options: SendWebhookMessageOptions): Promise<DiscordMessage> {
+        const webhook = await this.client.fetchWebhook(options.webhookId, options.webhookToken);
+        const msg = await webhook.send({
+            content: options.content,
+            embeds: options.embeds as any,
+            username: options.username,
+            avatarURL: options.avatarUrl,
+        });
+        return mapApiMessage(msg as any);
+    }
+
+    async editWebhookMessage(options: EditWebhookMessageOptions): Promise<DiscordMessage> {
+        const webhook = await this.client.fetchWebhook(options.webhookId, options.webhookToken);
+        const msg = await webhook.editMessage(options.messageId, {
+            content: options.content,
+            embeds: options.embeds as any,
+        });
+        return mapApiMessage(msg as any);
+    }
+
+    async deleteWebhookMessage(webhookId: string, webhookToken: string, messageId: string): Promise<void> {
+        const webhook = await this.client.fetchWebhook(webhookId, webhookToken);
+        await webhook.deleteMessage(messageId);
+    }
+
+    async fetchWebhookMessage(webhookId: string, webhookToken: string, messageId: string): Promise<DiscordMessage> {
+        const webhook = await this.client.fetchWebhook(webhookId, webhookToken);
+        const msg = await webhook.fetchMessage(messageId);
+        return mapApiMessage(msg as any);
+    }
 
     // ─── Forums ──────────────────────────────────────────────────
 
