@@ -332,6 +332,8 @@ export function mapApiInvite(raw: any): Invite {
         expiresAt: raw.expires_at ?? null,
         approximateMemberCount: raw.approximate_member_count ?? null,
         approximatePresenceCount: raw.approximate_presence_count ?? null,
+    };
+}
 
 // ─── Scheduled Events ───────────────────────────────────────────
 

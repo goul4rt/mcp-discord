@@ -167,6 +167,7 @@ describe('channel tools', () => {
         await tool.handler(
             {
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 name: 'renamed',
                 topic: 'new',
                 nsfw: false,
@@ -201,6 +202,7 @@ describe('channel tools', () => {
         await tool.handler(
             {
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 name: 'thread',
                 message_id: MESSAGE,
                 auto_archive_duration: '1440',
@@ -299,6 +301,7 @@ describe('message tools', () => {
                 query: 'hello',
                 author_id: AUTHOR,
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 limit: 10,
             },
             provider,
@@ -794,6 +797,8 @@ describe('dm tools', () => {
     it('send_dm schema rejects missing user_id', () => {
         const tool = findTool('send_dm');
         expect(() => tool.schema.parse({ content: 'hi' })).toThrow();
+    });
+});
 
 describe('scheduled event tools', () => {
     const GUILD = '123456789012345678';
@@ -831,6 +836,7 @@ describe('scheduled event tools', () => {
                 entity_type: 'voice',
                 scheduled_start_time: START,
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 description: 'Come hang out',
             },
             provider,
@@ -859,6 +865,7 @@ describe('scheduled event tools', () => {
                 scheduled_start_time: START,
                 scheduled_end_time: END,
                 location: 'Central Park',
+                privacy_level: 'GUILD_ONLY',
             },
             provider,
         );

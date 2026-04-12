@@ -609,10 +609,143 @@ const dmTools: ToolDefinition[] = [
 ];
 
 // ═════════════════════════════════════════════════════════════════
-// SCHEDULED EVENT TOOLS — populated by PR 5 (feat/scheduled-events)
+// SCHEDULED EVENT TOOLS
 // ═════════════════════════════════════════════════════════════════
 
-const scheduledEventTools: ToolDefinition[] = [];
+const entityTypeMap = { voice: 'VOICE', stage: 'STAGE_INSTANCE', external: 'EXTERNAL' } as const;
+
+const createScheduledEventSchema = z
+    .object({
+        guild_id: snowflakeId.describe('The server (guild) ID'),
+        name: z.string().describe('Event name'),
+        entity_type: z.enum(['voice', 'stage', 'external']).describe('Event hosting type'),
+        scheduled_start_time: z.string().describe('ISO 8601 start timestamp'),
+        scheduled_end_time: z.string().optional().describe('ISO 8601 end timestamp (required for external)'),
+        description: z.string().optional().describe('Event description'),
+        channel_id: snowflakeId.optional().describe('Voice/stage channel ID (required for voice/stage)'),
+        location: z.string().optional().describe('Physical or URL location (required for external)'),
+        privacy_level: z.literal('GUILD_ONLY').default('GUILD_ONLY').describe('Privacy level'),
+    })
+    .superRefine((data, ctx) => {
+        if (data.entity_type === 'external') {
+            if (!data.location) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: 'location is required when entity_type is external',
+                    path: ['location'],
+                });
+            }
+            if (!data.scheduled_end_time) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: 'scheduled_end_time is required when entity_type is external',
+                    path: ['scheduled_end_time'],
+                });
+            }
+        } else if (!data.channel_id) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: `channel_id is required when entity_type is ${data.entity_type}`,
+                path: ['channel_id'],
+            });
+        }
+    });
+
+const scheduledEventTools: ToolDefinition[] = [
+    {
+        name: 'list_scheduled_events',
+        description: 'List all scheduled events in a server. Returns voice, stage, and external events with their start times, status, and subscriber counts.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+        }),
+        handler: async (input, provider) => provider.listScheduledEvents(input.guild_id),
+    },
+    {
+        name: 'get_scheduled_event',
+        description: 'Get detailed information about a specific scheduled event including its status, location, and subscriber count.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+            event_id: snowflakeId.describe('The scheduled event ID'),
+        }),
+        handler: async (input, provider) => provider.getScheduledEvent(input.guild_id, input.event_id),
+    },
+    {
+        name: 'create_scheduled_event',
+        description: 'Create a voice, stage, or external scheduled event in a server. Voice and stage events require a channel_id; external events require location and scheduled_end_time.',
+        schema: createScheduledEventSchema,
+        handler: async (input, provider) => provider.createScheduledEvent({
+            guildId: input.guild_id,
+            name: input.name,
+            entityType: entityTypeMap[input.entity_type as 'voice' | 'stage' | 'external'],
+            scheduledStartTime: input.scheduled_start_time,
+            scheduledEndTime: input.scheduled_end_time,
+            description: input.description,
+            channelId: input.channel_id,
+            location: input.location,
+            privacyLevel: input.privacy_level,
+        }),
+    },
+    {
+        name: 'edit_scheduled_event',
+        description: 'Edit an existing scheduled event. All fields are optional — only provided fields are updated.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+            event_id: snowflakeId.describe('The scheduled event ID'),
+            name: z.string().optional().describe('New event name'),
+            entity_type: z.enum(['voice', 'stage', 'external']).optional().describe('New hosting type'),
+            scheduled_start_time: z.string().optional().describe('New ISO 8601 start timestamp'),
+            scheduled_end_time: z.string().optional().describe('New ISO 8601 end timestamp'),
+            description: z.string().optional().describe('New description'),
+            channel_id: snowflakeId.optional().describe('New voice/stage channel ID'),
+            location: z.string().optional().describe('New location for external events'),
+            privacy_level: z.literal('GUILD_ONLY').optional().describe('Privacy level'),
+        }),
+        handler: async (input, provider) => provider.editScheduledEvent({
+            guildId: input.guild_id,
+            eventId: input.event_id,
+            name: input.name,
+            entityType: input.entity_type ? entityTypeMap[input.entity_type as 'voice' | 'stage' | 'external'] : undefined,
+            scheduledStartTime: input.scheduled_start_time,
+            scheduledEndTime: input.scheduled_end_time,
+            description: input.description,
+            channelId: input.channel_id,
+            location: input.location,
+            privacyLevel: input.privacy_level,
+        }),
+    },
+    {
+        name: 'delete_scheduled_event',
+        description: 'Delete a scheduled event. This cannot be undone.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+            event_id: snowflakeId.describe('The scheduled event ID'),
+        }),
+        handler: async (input, provider) => {
+            await provider.deleteScheduledEvent(input.guild_id, input.event_id);
+            return { success: true, event_id: input.event_id };
+        },
+    },
+    {
+        name: 'get_event_subscribers',
+        description: 'Get users who marked themselves as "Interested" in a scheduled event.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+            event_id: snowflakeId.describe('The scheduled event ID'),
+            limit: z.number().min(1).max(100).optional().describe('Max subscribers to fetch (1-100)'),
+        }),
+        handler: async (input, provider) => provider.getEventSubscribers(input.guild_id, input.event_id, input.limit),
+    },
+    {
+        name: 'create_event_invite',
+        description: 'Create an invite link associated with a scheduled event. The URL includes ?event=<id> so recipients see event details on Discord.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+            event_id: snowflakeId.describe('The scheduled event ID'),
+            channel_id: snowflakeId.describe('The channel to anchor the invite to'),
+        }),
+        handler: async (input, provider) => provider.createEventInvite(input.guild_id, input.event_id, input.channel_id),
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
 // SCREENING TOOLS — populated by PR 6b (feat/screening)
