@@ -474,7 +474,7 @@ export class IntegratedProvider implements DiscordProvider {
             color: options.color,
             hoist: options.hoist,
             mentionable: options.mentionable,
-            permissions: options.permissions as any,
+            permissions: options.permissions ? BigInt(permissionNamesToBitfield(options.permissions)) : undefined,
         });
         return mapRole(edited);
     }
@@ -695,7 +695,7 @@ export class IntegratedProvider implements DiscordProvider {
             username: options.username,
             avatarURL: options.avatarUrl,
         });
-        return mapApiMessage(msg as any);
+        return mapMessage(msg);
     }
 
     async editWebhookMessage(options: EditWebhookMessageOptions): Promise<DiscordMessage> {
@@ -704,7 +704,7 @@ export class IntegratedProvider implements DiscordProvider {
             content: options.content,
             embeds: options.embeds as any,
         });
-        return mapApiMessage(msg as any);
+        return mapMessage(msg);
     }
 
     async deleteWebhookMessage(webhookId: string, webhookToken: string, messageId: string): Promise<void> {
@@ -715,7 +715,7 @@ export class IntegratedProvider implements DiscordProvider {
     async fetchWebhookMessage(webhookId: string, webhookToken: string, messageId: string): Promise<DiscordMessage> {
         const webhook = await this.client.fetchWebhook(webhookId, webhookToken);
         const msg = await webhook.fetchMessage(messageId);
-        return mapApiMessage(msg as any);
+        return mapMessage(msg);
     }
 
     // ─── Forums ──────────────────────────────────────────────────

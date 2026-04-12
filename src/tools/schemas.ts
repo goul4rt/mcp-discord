@@ -100,6 +100,8 @@ export const permissionFlag = z.enum([
     'SEND_VOICE_MESSAGES',
     'SEND_POLLS',
     'USE_EXTERNAL_APPS',
+    'PIN_MESSAGES',
+    'BYPASS_SLOWMODE',
 ]);
 
 export const permissionFlags = z.array(permissionFlag);

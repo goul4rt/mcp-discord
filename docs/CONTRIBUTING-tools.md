@@ -27,11 +27,13 @@ This document is the contract every contributor (human or agent) must follow whe
 - Each new method MUST be implemented in **both** providers.
 - For features that work over REST: implement them in `StandaloneProvider`'s REST branch and `IntegratedProvider` (which always has gateway access).
 - For features that **require** gateway: in `StandaloneProvider`'s REST-only branch, throw a clear error:
+
   ```typescript
   if (!this.client) {
       throw new Error('<tool_name> requires gateway mode (set DISCORD_USE_GATEWAY=true)');
   }
   ```
+
 - Never silently fall through to a different behavior in REST-only mode.
 
 ## Mappers

@@ -724,7 +724,7 @@ const webhookTools: ToolDefinition[] = [
         schema: z.object({
             channel_id: snowflakeId.describe('The channel to create the webhook on'),
             name: z.string().min(1).max(80).describe('Webhook name (1-80 characters)'),
-            avatar: z.string().optional().describe('Avatar image (data URI or URL)'),
+            avatar: z.string().optional().describe('Avatar image as data URI (data:image/png;base64,...). Plain URLs are not accepted by Discord API.'),
         }),
         handler: async (input, provider) => provider.createWebhook({
             channelId: input.channel_id,
@@ -1124,6 +1124,18 @@ const scheduledEventTools: ToolDefinition[] = [
             channel_id: snowflakeId.optional().describe('New voice/stage channel ID'),
             location: z.string().optional().describe('New location for external events'),
             privacy_level: z.literal('GUILD_ONLY').optional().describe('Privacy level'),
+        }).superRefine((data, ctx) => {
+            if (data.entity_type === 'external') {
+                if (!data.location) {
+                    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'location is required for external events', path: ['location'] });
+                }
+                if (!data.scheduled_end_time) {
+                    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'scheduled_end_time is required for external events', path: ['scheduled_end_time'] });
+                }
+            }
+            if ((data.entity_type === 'voice' || data.entity_type === 'stage') && !data.channel_id) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'channel_id is required for voice/stage events', path: ['channel_id'] });
+            }
         }),
         handler: async (input, provider) => provider.editScheduledEvent({
             guildId: input.guild_id,

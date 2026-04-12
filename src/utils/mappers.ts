@@ -415,6 +415,8 @@ const PERMISSION_NAME_TO_BIT: Record<string, bigint> = {
     SEND_VOICE_MESSAGES: PermissionFlagsBits.SendVoiceMessages,
     SEND_POLLS: PermissionFlagsBits.SendPolls,
     USE_EXTERNAL_APPS: PermissionFlagsBits.UseExternalApps,
+    PIN_MESSAGES: PermissionFlagsBits.PinMessages,
+    BYPASS_SLOWMODE: PermissionFlagsBits.BypassSlowmode,
 };
 
 const BIT_TO_PERMISSION_NAME: Array<{ bit: bigint; name: string }> = Object.entries(

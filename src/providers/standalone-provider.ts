@@ -776,7 +776,7 @@ export class StandaloneProvider implements DiscordProvider {
         if (options.hoist !== undefined) body.hoist = options.hoist;
         if (options.mentionable !== undefined) body.mentionable = options.mentionable;
         if (options.permissions !== undefined) {
-            body.permissions = permissionFlagsToBitfield(options.permissions);
+            body.permissions = permissionNamesToBitfield(options.permissions);
         }
         const r = (await this.rest.patch(Routes.guildRole(options.guildId, options.roleId), {
             body,
