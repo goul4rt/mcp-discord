@@ -524,7 +524,120 @@ const webhookTools: ToolDefinition[] = [];
 // FORUM TOOLS — populated by PR 3 (feat/forums)
 // ═════════════════════════════════════════════════════════════════
 
-const forumTools: ToolDefinition[] = [];
+const forumTools: ToolDefinition[] = [
+    {
+        name: 'get_forum_channels',
+        description: 'List all forum channels in a server. Returns only channels of type "forum".',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+        }),
+        handler: async (input, provider) => provider.getForumChannels(input.guild_id),
+    },
+    {
+        name: 'create_forum_post',
+        description: 'Create a new post (thread) in a forum channel with a starter message. Optionally apply forum tags and set an auto-archive duration.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The forum channel ID'),
+            name: z.string().describe('Post title'),
+            content: z.string().describe('Starter message content'),
+            tag_ids: z.array(snowflakeId).optional().describe('Forum tag IDs to apply'),
+            auto_archive_duration: z.enum(['60', '1440', '4320', '10080']).optional().describe('Auto-archive after minutes: 60 (1h), 1440 (1d), 4320 (3d), 10080 (7d)'),
+        }),
+        handler: async (input, provider) => provider.createForumPost({
+            channelId: input.channel_id,
+            name: input.name,
+            content: input.content,
+            tagIds: input.tag_ids,
+            autoArchiveDuration: input.auto_archive_duration ? Number(input.auto_archive_duration) as any : undefined,
+        }),
+    },
+    {
+        name: 'get_forum_post',
+        description: 'Fetch a forum post (thread) by its id, including applied tags, archive state, and message count.',
+        schema: z.object({
+            post_id: snowflakeId.describe('The forum post (thread) ID'),
+        }),
+        handler: async (input, provider) => provider.getForumPost(input.post_id),
+    },
+    {
+        name: 'list_forum_threads',
+        description: 'List active or archived threads (posts) in a forum channel.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The forum channel ID'),
+            archived: z.boolean().optional().describe('If true, return archived threads; otherwise active'),
+            limit: z.number().min(1).max(100).optional().describe('Max threads to return'),
+        }),
+        handler: async (input, provider) => provider.listForumThreads(input.channel_id, input.archived, input.limit),
+    },
+    {
+        name: 'delete_forum_post',
+        description: 'Delete a forum post (thread). This cannot be undone.',
+        schema: z.object({
+            post_id: snowflakeId.describe('The forum post (thread) ID'),
+            reason: z.string().optional().describe('Reason (audit log)'),
+        }),
+        handler: async (input, provider) => {
+            await provider.deleteForumPost(input.post_id, input.reason);
+            return { success: true, post_id: input.post_id };
+        },
+    },
+    {
+        name: 'get_forum_tags',
+        description: 'Get the list of available tags configured on a forum channel.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The forum channel ID'),
+        }),
+        handler: async (input, provider) => provider.getForumTags(input.channel_id),
+    },
+    {
+        name: 'set_forum_tags',
+        description: 'Replace the list of available tags on a forum channel. Tags not included are removed.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The forum channel ID'),
+            tags: z.array(z.object({
+                name: z.string().describe('Tag name'),
+                emoji: z.object({
+                    id: snowflakeId.nullable().optional().describe('Custom emoji ID'),
+                    name: z.string().nullable().optional().describe('Unicode emoji'),
+                }).optional().describe('Emoji associated with the tag'),
+                moderated: z.boolean().optional().describe('Whether applying this tag requires Manage Threads'),
+            })).describe('The full set of tags to configure'),
+        }),
+        handler: async (input, provider) => provider.setForumTags(input.channel_id, input.tags),
+    },
+    {
+        name: 'update_forum_post',
+        description: 'Update a forum post: rename, archive/unarchive, lock/unlock, or change applied tags.',
+        schema: z.object({
+            post_id: snowflakeId.describe('The forum post (thread) ID'),
+            name: z.string().optional().describe('New post title'),
+            archived: z.boolean().optional().describe('Archive state'),
+            locked: z.boolean().optional().describe('Lock state'),
+            applied_tag_ids: z.array(snowflakeId).optional().describe('New set of applied tag IDs'),
+        }),
+        handler: async (input, provider) => provider.updateForumPost({
+            postId: input.post_id,
+            name: input.name,
+            archived: input.archived,
+            locked: input.locked,
+            appliedTagIds: input.applied_tag_ids,
+        }),
+    },
+    {
+        name: 'reply_to_forum',
+        description: 'Send a reply message to an existing forum post (thread). Supports text content and rich embeds.',
+        schema: z.object({
+            post_id: snowflakeId.describe('The forum post (thread) ID'),
+            content: z.string().optional().describe('Text content of the reply'),
+            embeds: z.array(embedSchema).optional().describe('Rich embed objects'),
+        }),
+        handler: async (input, provider) => provider.replyToForum({
+            postId: input.post_id,
+            content: input.content,
+            embeds: input.embeds,
+        }),
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
 // INVITE TOOLS — populated by PR 4 (feat/invites-dms)
