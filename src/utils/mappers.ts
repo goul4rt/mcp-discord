@@ -396,6 +396,7 @@ const PERMISSION_NAME_TO_BIT: Record<string, bigint> = {
     MANAGE_NICKNAMES: PermissionFlagsBits.ManageNicknames,
     MANAGE_ROLES: PermissionFlagsBits.ManageRoles,
     MANAGE_WEBHOOKS: PermissionFlagsBits.ManageWebhooks,
+    MANAGE_EMOJIS_AND_STICKERS: PermissionFlagsBits.ManageEmojisAndStickers,
     MANAGE_GUILD_EXPRESSIONS: PermissionFlagsBits.ManageGuildExpressions,
     USE_APPLICATION_COMMANDS: PermissionFlagsBits.UseApplicationCommands,
     REQUEST_TO_SPEAK: PermissionFlagsBits.RequestToSpeak,
