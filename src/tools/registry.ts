@@ -12,7 +12,7 @@
 
 import { z } from 'zod';
 import type { DiscordProvider } from '../providers/discord-provider.js';
-import { snowflakeId, embedSchema } from './schemas.js';
+import { snowflakeId, embedSchema, permissionFlags } from './schemas.js';
 
 // ─── Tool Definition Type ───────────────────────────────────────
 
@@ -509,10 +509,78 @@ const monitoringTools: ToolDefinition[] = [
 ];
 
 // ═════════════════════════════════════════════════════════════════
-// PERMISSION TOOLS — populated by PR 1 (feat/permissions)
+// PERMISSION TOOLS
 // ═════════════════════════════════════════════════════════════════
 
-const permissionTools: ToolDefinition[] = [];
+const permissionTools: ToolDefinition[] = [
+    {
+        name: 'get_channel_permissions',
+        description: 'List all permission overwrites on a channel. Returns role and member overwrites with their allowed and denied permission names.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The channel ID'),
+        }),
+        handler: async (input, provider) => provider.getChannelPermissions(input.channel_id),
+    },
+    {
+        name: 'set_role_permission',
+        description: 'Allow or deny specific permissions for a role on a channel. Overwrites any existing role overwrite on that channel.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The channel ID'),
+            role_id: snowflakeId.describe('The role to grant or deny permissions for'),
+            allow: permissionFlags.default([]).describe('Permission names to explicitly allow'),
+            deny: permissionFlags.default([]).describe('Permission names to explicitly deny'),
+        }),
+        handler: async (input, provider) => {
+            await provider.setRolePermission(input.channel_id, input.role_id, input.allow, input.deny);
+            return { success: true, channel_id: input.channel_id, role_id: input.role_id };
+        },
+    },
+    {
+        name: 'set_member_permission',
+        description: 'Allow or deny specific permissions for a single member on a channel. Overwrites any existing member overwrite on that channel.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The channel ID'),
+            user_id: snowflakeId.describe('The member to grant or deny permissions for'),
+            allow: permissionFlags.default([]).describe('Permission names to explicitly allow'),
+            deny: permissionFlags.default([]).describe('Permission names to explicitly deny'),
+        }),
+        handler: async (input, provider) => {
+            await provider.setMemberPermission(input.channel_id, input.user_id, input.allow, input.deny);
+            return { success: true, channel_id: input.channel_id, user_id: input.user_id };
+        },
+    },
+    {
+        name: 'reset_channel_permissions',
+        description: 'Remove every permission overwrite from a channel so it inherits from its parent category.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The channel ID'),
+        }),
+        handler: async (input, provider) => {
+            await provider.resetChannelPermissions(input.channel_id);
+            return { success: true, channel_id: input.channel_id };
+        },
+    },
+    {
+        name: 'copy_permissions',
+        description: 'Copy all permission overwrites from a source channel to a target channel.',
+        schema: z.object({
+            source_channel_id: snowflakeId.describe('The channel to copy overwrites from'),
+            target_channel_id: snowflakeId.describe('The channel to copy overwrites to'),
+        }),
+        handler: async (input, provider) => {
+            await provider.copyPermissions(input.source_channel_id, input.target_channel_id);
+            return { success: true, source_channel_id: input.source_channel_id, target_channel_id: input.target_channel_id };
+        },
+    },
+    {
+        name: 'audit_permissions',
+        description: 'Return the permission overwrites for every channel in a server. Useful for auditing who has access to what.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The server (guild) ID'),
+        }),
+        handler: async (input, provider) => provider.auditPermissions(input.guild_id),
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
 // WEBHOOK TOOLS — populated by PR 2 (feat/webhooks)

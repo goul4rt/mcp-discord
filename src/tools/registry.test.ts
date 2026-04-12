@@ -76,8 +76,8 @@ describe('snowflake ID schema', () => {
 });
 
 describe('tool registry', () => {
-    it('exposes all 33 tools via allTools', () => {
-        expect(allTools).toHaveLength(33);
+    it('exposes all 39 tools via allTools', () => {
+        expect(allTools).toHaveLength(39);
     });
 
     it('has a unique name per tool', () => {
