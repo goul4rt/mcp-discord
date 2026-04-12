@@ -518,7 +518,120 @@ const permissionTools: ToolDefinition[] = [];
 // WEBHOOK TOOLS — populated by PR 2 (feat/webhooks)
 // ═════════════════════════════════════════════════════════════════
 
-const webhookTools: ToolDefinition[] = [];
+const webhookTools: ToolDefinition[] = [
+    {
+        name: 'create_webhook',
+        description: 'Create a webhook on a channel. Returns the new webhook with its token and URL.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The channel to create the webhook on'),
+            name: z.string().min(1).max(80).describe('Webhook name (1-80 characters)'),
+            avatar: z.string().optional().describe('Avatar image (data URI or URL)'),
+        }),
+        handler: async (input, provider) => provider.createWebhook({
+            channelId: input.channel_id,
+            name: input.name,
+            avatar: input.avatar,
+        }),
+    },
+    {
+        name: 'list_webhooks',
+        description: 'List webhooks for a channel or guild.',
+        schema: z.object({
+            scope: z.enum(['channel', 'guild']).describe('Whether to list webhooks for a channel or an entire guild'),
+            id: snowflakeId.describe('The channel or guild ID (depending on scope)'),
+        }),
+        handler: async (input, provider) => provider.listWebhooks(input.scope, input.id),
+    },
+    {
+        name: 'edit_webhook',
+        description: 'Edit a webhook. Can change its name, avatar, or move it to a different channel.',
+        schema: z.object({
+            webhook_id: snowflakeId.describe('The webhook to edit'),
+            name: z.string().min(1).max(80).optional().describe('New webhook name'),
+            avatar: z.string().optional().describe('New avatar image'),
+            channel_id: snowflakeId.optional().describe('Move webhook to this channel'),
+        }),
+        handler: async (input, provider) => provider.editWebhook({
+            webhookId: input.webhook_id,
+            name: input.name,
+            avatar: input.avatar,
+            channelId: input.channel_id,
+        }),
+    },
+    {
+        name: 'delete_webhook',
+        description: 'Delete a webhook permanently.',
+        schema: z.object({
+            webhook_id: snowflakeId.describe('The webhook to delete'),
+            reason: z.string().optional().describe('Reason for deletion (audit log)'),
+        }),
+        handler: async (input, provider) => {
+            await provider.deleteWebhook(input.webhook_id, input.reason);
+            return { success: true, webhook_id: input.webhook_id };
+        },
+    },
+    {
+        name: 'send_webhook_message',
+        description: 'Send a message via a webhook. Supports text content, rich embeds, and overriding the display name and avatar.',
+        schema: z.object({
+            webhook_id: snowflakeId.describe('The webhook ID'),
+            webhook_token: z.string().describe('The webhook token'),
+            content: z.string().optional().describe('Text content'),
+            embeds: z.array(embedSchema).optional().describe('Rich embed objects'),
+            username: z.string().optional().describe('Override the webhook display name'),
+            avatar_url: z.string().optional().describe('Override the webhook avatar URL'),
+        }),
+        handler: async (input, provider) => provider.sendWebhookMessage({
+            webhookId: input.webhook_id,
+            webhookToken: input.webhook_token,
+            content: input.content,
+            embeds: input.embeds,
+            username: input.username,
+            avatarUrl: input.avatar_url,
+        }),
+    },
+    {
+        name: 'edit_webhook_message',
+        description: 'Edit a message previously sent by a webhook.',
+        schema: z.object({
+            webhook_id: snowflakeId.describe('The webhook ID'),
+            webhook_token: z.string().describe('The webhook token'),
+            message_id: snowflakeId.describe('The message to edit'),
+            content: z.string().optional().describe('New text content'),
+            embeds: z.array(embedSchema).optional().describe('New embeds'),
+        }),
+        handler: async (input, provider) => provider.editWebhookMessage({
+            webhookId: input.webhook_id,
+            webhookToken: input.webhook_token,
+            messageId: input.message_id,
+            content: input.content,
+            embeds: input.embeds,
+        }),
+    },
+    {
+        name: 'delete_webhook_message',
+        description: 'Delete a message sent by a webhook.',
+        schema: z.object({
+            webhook_id: snowflakeId.describe('The webhook ID'),
+            webhook_token: z.string().describe('The webhook token'),
+            message_id: snowflakeId.describe('The message to delete'),
+        }),
+        handler: async (input, provider) => {
+            await provider.deleteWebhookMessage(input.webhook_id, input.webhook_token, input.message_id);
+            return { success: true };
+        },
+    },
+    {
+        name: 'fetch_webhook_message',
+        description: 'Fetch a specific message sent by a webhook.',
+        schema: z.object({
+            webhook_id: snowflakeId.describe('The webhook ID'),
+            webhook_token: z.string().describe('The webhook token'),
+            message_id: snowflakeId.describe('The message to fetch'),
+        }),
+        handler: async (input, provider) => provider.fetchWebhookMessage(input.webhook_id, input.webhook_token, input.message_id),
+    },
+];
 
 // ═════════════════════════════════════════════════════════════════
 // FORUM TOOLS — populated by PR 3 (feat/forums)
