@@ -38,6 +38,7 @@ import type {
     CreateChannelOptions,
     CreateRoleOptions,
     CreateThreadOptions,
+    CreateWebhookOptions,
     DiscordChannel,
     DiscordChannelSummary,
     DiscordEmbed,
@@ -48,15 +49,19 @@ import type {
     DiscordRole,
     DiscordUser,
     EditChannelOptions,
+    EditWebhookMessageOptions,
+    EditWebhookOptions,
     KickOptions,
     PaginatedResult,
     ReadMessagesOptions,
     SearchMessagesOptions,
     SendMessageOptions,
+    SendWebhookMessageOptions,
     TimeoutOptions,
     ChannelType,
+    Webhook,
 } from '../types/discord.js';
-import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage } from '../utils/mappers.js';
+import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage, mapWebhook, mapApiWebhook } from '../utils/mappers.js';
 
 export class StandaloneProvider implements DiscordProvider {
     readonly name = 'standalone';
@@ -684,7 +689,112 @@ export class StandaloneProvider implements DiscordProvider {
     // Methods added by PR 1 (feat/permissions).
 
     // ─── Webhooks ────────────────────────────────────────────────
-    // Methods added by PR 2 (feat/webhooks).
+
+    async createWebhook(options: CreateWebhookOptions): Promise<Webhook> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(options.channelId);
+            if (!channel || !('createWebhook' in channel)) {
+                throw new Error(`Channel ${options.channelId} does not support webhooks`);
+            }
+            const webhook = await (channel as TextChannel).createWebhook({
+                name: options.name,
+                avatar: options.avatar,
+                reason: options.reason,
+            });
+            return mapWebhook(webhook);
+        }
+        const body: any = { name: options.name };
+        if (options.avatar) body.avatar = options.avatar;
+        const wh = await this.rest.post(Routes.channelWebhooks(options.channelId), {
+            body,
+            reason: options.reason,
+        });
+        return mapApiWebhook(wh);
+    }
+
+    async listWebhooks(scope: 'channel' | 'guild', id: string): Promise<Webhook[]> {
+        if (this.client) {
+            if (scope === 'guild') {
+                const guild = await this.resolveGuild(id);
+                const webhooks = await guild.fetchWebhooks();
+                return webhooks.map(w => mapWebhook(w));
+            }
+            const channel = await this.client.channels.fetch(id);
+            if (!channel || !('fetchWebhooks' in channel)) {
+                throw new Error(`Channel ${id} does not support webhooks`);
+            }
+            const webhooks = await (channel as TextChannel).fetchWebhooks();
+            return webhooks.map(w => mapWebhook(w));
+        }
+        const route = scope === 'guild'
+            ? Routes.guildWebhooks(id)
+            : Routes.channelWebhooks(id);
+        const webhooks = (await this.rest.get(route)) as any[];
+        return webhooks.map(w => mapApiWebhook(w));
+    }
+
+    async editWebhook(options: EditWebhookOptions): Promise<Webhook> {
+        if (this.client) {
+            const webhook = await this.client.fetchWebhook(options.webhookId);
+            const edited = await webhook.edit({
+                name: options.name,
+                avatar: options.avatar,
+                channel: options.channelId,
+                reason: options.reason,
+            });
+            return mapWebhook(edited);
+        }
+        const body: any = {};
+        if (options.name !== undefined) body.name = options.name;
+        if (options.avatar !== undefined) body.avatar = options.avatar;
+        if (options.channelId !== undefined) body.channel_id = options.channelId;
+        const wh = await this.rest.patch(Routes.webhook(options.webhookId), {
+            body,
+            reason: options.reason,
+        });
+        return mapApiWebhook(wh);
+    }
+
+    async deleteWebhook(webhookId: string, reason?: string): Promise<void> {
+        await this.rest.delete(Routes.webhook(webhookId), { reason });
+    }
+
+    async sendWebhookMessage(options: SendWebhookMessageOptions): Promise<DiscordMessage> {
+        const body: any = {};
+        if (options.content) body.content = options.content;
+        if (options.embeds) body.embeds = options.embeds;
+        if (options.username) body.username = options.username;
+        if (options.avatarUrl) body.avatar_url = options.avatarUrl;
+        const msg = await this.rest.post(
+            Routes.webhook(options.webhookId, options.webhookToken),
+            { body, query: new URLSearchParams({ wait: 'true' }) },
+        );
+        return mapApiMessage(msg);
+    }
+
+    async editWebhookMessage(options: EditWebhookMessageOptions): Promise<DiscordMessage> {
+        const body: any = {};
+        if (options.content !== undefined) body.content = options.content;
+        if (options.embeds) body.embeds = options.embeds;
+        const msg = await this.rest.patch(
+            Routes.webhookMessage(options.webhookId, options.webhookToken, options.messageId),
+            { body },
+        );
+        return mapApiMessage(msg);
+    }
+
+    async deleteWebhookMessage(webhookId: string, webhookToken: string, messageId: string): Promise<void> {
+        await this.rest.delete(
+            Routes.webhookMessage(webhookId, webhookToken, messageId),
+        );
+    }
+
+    async fetchWebhookMessage(webhookId: string, webhookToken: string, messageId: string): Promise<DiscordMessage> {
+        const msg = await this.rest.get(
+            Routes.webhookMessage(webhookId, webhookToken, messageId),
+        );
+        return mapApiMessage(msg);
+    }
 
     // ─── Forums ──────────────────────────────────────────────────
     // Methods added by PR 3 (feat/forums).
