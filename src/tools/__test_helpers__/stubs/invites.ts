@@ -1,6 +1,12 @@
+import { vi } from 'vitest';
 import type { InviteCapability } from '../../../providers/capabilities/invites.js';
 
-// Populated by PR 4 (feat/invites-dms).
 export function makeInviteStubs(): InviteCapability {
-    return {};
+    return {
+        listInvites: vi.fn().mockResolvedValue([]),
+        listChannelInvites: vi.fn().mockResolvedValue([]),
+        getInvite: vi.fn().mockResolvedValue({ code: 'abc' }),
+        createInvite: vi.fn().mockResolvedValue({ code: 'abc' }),
+        deleteInvite: vi.fn().mockResolvedValue(undefined),
+    };
 }
