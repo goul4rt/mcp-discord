@@ -36,6 +36,7 @@ import { ProviderDefaults } from './base-provider.js';
 import type {
     AuditLogEntry,
     BanOptions,
+    ChannelPermissionsAudit,
     CreateChannelOptions,
     CreateForumPostOptions,
     CreateInviteOptions,
@@ -57,6 +58,7 @@ import type {
     Invite,
     KickOptions,
     PaginatedResult,
+    PermissionOverwrite,
     ReadMessagesOptions,
     ReplyToForumOptions,
     ScheduledEvent,
@@ -74,7 +76,27 @@ import type {
     EditScheduledEventOptions,
     ScheduledEventInvite,
 } from './capabilities/scheduledEvents.js';
-import { mapApiForumPost, mapApiForumTag, mapApiInvite, mapApiMessage, mapApiScheduledEvent, mapApiWelcomeScreen, mapChannel, mapChannelSummary, mapChannelType, mapForumPost, mapForumTag, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser } from '../utils/mappers.js';
+import {
+    mapApiForumPost,
+    mapApiForumTag,
+    mapApiInvite,
+    mapApiMessage,
+    mapApiPermissionOverwrite,
+    mapApiScheduledEvent,
+    mapApiWelcomeScreen,
+    mapChannel,
+    mapChannelSummary,
+    mapChannelType,
+    mapForumPost,
+    mapForumTag,
+    mapGuild,
+    mapGuildDetailed,
+    mapMember,
+    mapMessage,
+    mapRole,
+    mapUser,
+    permissionNamesToBitfield,
+} from '../utils/mappers.js';
 
 export class StandaloneProvider implements DiscordProvider {
     readonly name = 'standalone';
@@ -699,7 +721,72 @@ export class StandaloneProvider implements DiscordProvider {
     }
 
     // ─── Permissions ─────────────────────────────────────────────
-    // Methods added by PR 1 (feat/permissions).
+
+    async getChannelPermissions(channelId: string): Promise<PermissionOverwrite[]> {
+        const c = (await this.rest.get(Routes.channel(channelId))) as any;
+        return (c.permission_overwrites ?? []).map((o: any) => mapApiPermissionOverwrite(o));
+    }
+
+    async setRolePermission(
+        channelId: string,
+        roleId: string,
+        allow: string[],
+        deny: string[],
+    ): Promise<void> {
+        await this.rest.put(`/channels/${channelId}/permissions/${roleId}`, {
+            body: {
+                type: 0,
+                allow: permissionNamesToBitfield(allow),
+                deny: permissionNamesToBitfield(deny),
+            },
+        });
+    }
+
+    async setMemberPermission(
+        channelId: string,
+        userId: string,
+        allow: string[],
+        deny: string[],
+    ): Promise<void> {
+        await this.rest.put(`/channels/${channelId}/permissions/${userId}`, {
+            body: {
+                type: 1,
+                allow: permissionNamesToBitfield(allow),
+                deny: permissionNamesToBitfield(deny),
+            },
+        });
+    }
+
+    async resetChannelPermissions(channelId: string): Promise<void> {
+        const c = (await this.rest.get(Routes.channel(channelId))) as any;
+        const overwrites = (c.permission_overwrites ?? []) as any[];
+        for (const o of overwrites) {
+            await this.rest.delete(`/channels/${channelId}/permissions/${o.id}`);
+        }
+    }
+
+    async copyPermissions(sourceChannelId: string, targetChannelId: string): Promise<void> {
+        const source = (await this.rest.get(Routes.channel(sourceChannelId))) as any;
+        const overwrites = (source.permission_overwrites ?? []) as any[];
+        for (const o of overwrites) {
+            await this.rest.put(`/channels/${targetChannelId}/permissions/${o.id}`, {
+                body: {
+                    type: Number(o.type),
+                    allow: String(o.allow ?? '0'),
+                    deny: String(o.deny ?? '0'),
+                },
+            });
+        }
+    }
+
+    async auditPermissions(guildId: string): Promise<ChannelPermissionsAudit[]> {
+        const channels = (await this.rest.get(Routes.guildChannels(guildId))) as any[];
+        return channels.map(c => ({
+            channelId: c.id,
+            channelName: c.name,
+            overwrites: (c.permission_overwrites ?? []).map((o: any) => mapApiPermissionOverwrite(o)),
+        }));
+    }
 
     // ─── Webhooks ────────────────────────────────────────────────
     // Methods added by PR 2 (feat/webhooks).

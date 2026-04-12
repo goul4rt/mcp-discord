@@ -1,7 +1,20 @@
-// Channel permission management — populated by PR 1 (feat/permissions).
+import type { ChannelPermissionsAudit, PermissionOverwrite } from '../../types/discord.js';
 
 export interface PermissionCapability {
-    // Methods added by PR 1: get_channel_permissions, set_role_permission,
-    // set_member_permission, reset_channel_permissions, copy_permissions,
-    // audit_permissions
+    getChannelPermissions(channelId: string): Promise<PermissionOverwrite[]>;
+    setRolePermission(
+        channelId: string,
+        roleId: string,
+        allow: string[],
+        deny: string[],
+    ): Promise<void>;
+    setMemberPermission(
+        channelId: string,
+        userId: string,
+        allow: string[],
+        deny: string[],
+    ): Promise<void>;
+    resetChannelPermissions(channelId: string): Promise<void>;
+    copyPermissions(sourceChannelId: string, targetChannelId: string): Promise<void>;
+    auditPermissions(guildId: string): Promise<ChannelPermissionsAudit[]>;
 }
