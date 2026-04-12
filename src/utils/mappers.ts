@@ -14,6 +14,7 @@ import {
     type Message,
     type Role,
     type User,
+    type Webhook as DjsWebhook,
 } from 'discord.js';
 
 import {
@@ -26,6 +27,7 @@ import {
     type DiscordMessage,
     type DiscordRole,
     type DiscordUser,
+    type Webhook,
 } from '../types/discord.js';
 
 // ─── Channel Type Mapping ───────────────────────────────────────
@@ -245,5 +247,35 @@ export function mapApiMessage(msg: any, fallbackGuildId?: string): DiscordMessag
         })),
         replyTo: msg.message_reference?.message_id ?? null,
         pinned: msg.pinned ?? false,
+    };
+}
+
+// ─── Webhook ───────────────────────────────────────────────────
+
+export function mapWebhook(webhook: DjsWebhook): Webhook {
+    return {
+        id: webhook.id,
+        type: webhook.type,
+        guildId: webhook.guildId ?? null,
+        channelId: webhook.channelId ?? null,
+        name: webhook.name ?? null,
+        avatar: webhook.avatar ?? null,
+        token: webhook.token ?? null,
+        applicationId: webhook.applicationId ?? null,
+        url: webhook.url ?? null,
+    };
+}
+
+export function mapApiWebhook(wh: any): Webhook {
+    return {
+        id: wh.id,
+        type: wh.type,
+        guildId: wh.guild_id ?? null,
+        channelId: wh.channel_id ?? null,
+        name: wh.name ?? null,
+        avatar: wh.avatar ?? null,
+        token: wh.token ?? null,
+        applicationId: wh.application_id ?? null,
+        url: wh.url ?? null,
     };
 }
