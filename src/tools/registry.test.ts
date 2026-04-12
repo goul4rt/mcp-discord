@@ -611,3 +611,126 @@ describe('monitoring tools', () => {
         expect(provider.checkMentions).toHaveBeenCalledWith(GUILD, USER, 10);
     });
 });
+
+describe('permission tools', () => {
+    const CHANNEL = '234567890123456789';
+    const GUILD = '123456789012345678';
+    const ROLE = '678901234567890123';
+    const USER = '567890123456789012';
+    const SOURCE = '345678901234567890';
+    const TARGET = '456789012345678901';
+
+    it('get_channel_permissions calls provider.getChannelPermissions', async () => {
+        const tool = findTool('get_channel_permissions');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.getChannelPermissions).toHaveBeenCalledWith(CHANNEL);
+    });
+
+    it('get_channel_permissions schema rejects missing channel_id', () => {
+        const tool = findTool('get_channel_permissions');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('set_role_permission passes allow and deny arrays to provider', async () => {
+        const tool = findTool('set_role_permission');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            {
+                channel_id: CHANNEL,
+                role_id: ROLE,
+                allow: ['SEND_MESSAGES', 'VIEW_CHANNEL'],
+                deny: ['MANAGE_CHANNELS'],
+            },
+            provider,
+        );
+        expect(provider.setRolePermission).toHaveBeenCalledWith(
+            CHANNEL,
+            ROLE,
+            ['SEND_MESSAGES', 'VIEW_CHANNEL'],
+            ['MANAGE_CHANNELS'],
+        );
+        expect(result).toEqual({ success: true, channel_id: CHANNEL, role_id: ROLE });
+    });
+
+    it('set_role_permission defaults allow and deny to empty arrays', () => {
+        const tool = findTool('set_role_permission');
+        const parsed = tool.schema.parse({ channel_id: CHANNEL, role_id: ROLE });
+        expect(parsed.allow).toEqual([]);
+        expect(parsed.deny).toEqual([]);
+    });
+
+    it('set_role_permission schema rejects invalid permission flag', () => {
+        const tool = findTool('set_role_permission');
+        expect(() =>
+            tool.schema.parse({ channel_id: CHANNEL, role_id: ROLE, allow: ['BOGUS_FLAG'] }),
+        ).toThrow();
+    });
+
+    it('set_member_permission passes allow and deny arrays to provider', async () => {
+        const tool = findTool('set_member_permission');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            {
+                channel_id: CHANNEL,
+                user_id: USER,
+                allow: ['READ_MESSAGE_HISTORY'],
+                deny: ['SEND_MESSAGES'],
+            },
+            provider,
+        );
+        expect(provider.setMemberPermission).toHaveBeenCalledWith(
+            CHANNEL,
+            USER,
+            ['READ_MESSAGE_HISTORY'],
+            ['SEND_MESSAGES'],
+        );
+        expect(result).toEqual({ success: true, channel_id: CHANNEL, user_id: USER });
+    });
+
+    it('set_member_permission defaults allow and deny to empty arrays', () => {
+        const tool = findTool('set_member_permission');
+        const parsed = tool.schema.parse({ channel_id: CHANNEL, user_id: USER });
+        expect(parsed.allow).toEqual([]);
+        expect(parsed.deny).toEqual([]);
+    });
+
+    it('reset_channel_permissions returns success with channel_id', async () => {
+        const tool = findTool('reset_channel_permissions');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.resetChannelPermissions).toHaveBeenCalledWith(CHANNEL);
+        expect(result).toEqual({ success: true, channel_id: CHANNEL });
+    });
+
+    it('copy_permissions returns success and passes source and target', async () => {
+        const tool = findTool('copy_permissions');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { source_channel_id: SOURCE, target_channel_id: TARGET },
+            provider,
+        );
+        expect(provider.copyPermissions).toHaveBeenCalledWith(SOURCE, TARGET);
+        expect(result).toEqual({ success: true, source_channel_id: SOURCE, target_channel_id: TARGET });
+    });
+
+    it('copy_permissions schema rejects missing target_channel_id', () => {
+        const tool = findTool('copy_permissions');
+        expect(() => tool.schema.parse({ source_channel_id: SOURCE })).toThrow();
+    });
+
+    it('audit_permissions returns provider result directly', async () => {
+        const tool = findTool('audit_permissions');
+        const provider = makeStubProvider();
+        const mockAudit = [{ channel_id: CHANNEL, overwrites: [] }];
+        (provider.auditPermissions as ReturnType<typeof vi.fn>).mockResolvedValue(mockAudit);
+        const result = await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.auditPermissions).toHaveBeenCalledWith(GUILD);
+        expect(result).toEqual(mockAudit);
+    });
+
+    it('audit_permissions schema rejects missing guild_id', () => {
+        const tool = findTool('audit_permissions');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+});
