@@ -1,45 +1,48 @@
 /**
  * DiscordProvider — the core abstraction layer.
  *
- * Every method here maps to a Discord capability that MCP tools need.
+ * Composed from per-feature capability interfaces in ./capabilities/.
+ * Each capability covers one Discord domain (channels, messages, webhooks, etc.).
+ *
  * Two implementations exist:
- *
- *   1. IntegratedProvider — receives an existing discord.js Client
- *      from the host bot (zero overhead, shared cache & gateway)
- *
- *   2. StandaloneProvider — creates its own connection using a bot
- *      token (independent process, REST-first with optional gateway)
+ *   1. IntegratedProvider — receives an existing discord.js Client from the host bot
+ *   2. StandaloneProvider — creates its own connection using a bot token
  *
  * MCP tools NEVER touch discord.js directly — they only call this interface.
- * This makes it trivial to add new providers (e.g., a mock for tests,
- * an HTTP proxy, or a user-token provider).
  */
 
-import type {
-    AuditLogEntry,
-    BanOptions,
-    CreateChannelOptions,
-    CreateRoleOptions,
-    CreateThreadOptions,
-    DiscordChannel,
-    DiscordChannelSummary,
-    DiscordEmbed,
-    DiscordGuild,
-    DiscordGuildDetailed,
-    DiscordMember,
-    DiscordMessage,
-    DiscordRole,
-    DiscordUser,
-    EditChannelOptions,
-    KickOptions,
-    PaginatedResult,
-    ReadMessagesOptions,
-    SearchMessagesOptions,
-    SendMessageOptions,
-    TimeoutOptions,
-} from '../types/discord.js';
+import type { ServerCapability } from './capabilities/server.js';
+import type { ChannelCapability } from './capabilities/channels.js';
+import type { MessageCapability } from './capabilities/messages.js';
+import type { ReactionCapability } from './capabilities/reactions.js';
+import type { MemberCapability } from './capabilities/members.js';
+import type { RoleCapability } from './capabilities/roles.js';
+import type { ModerationCapability } from './capabilities/moderation.js';
+import type { MonitoringCapability } from './capabilities/monitoring.js';
+import type { PermissionCapability } from './capabilities/permissions.js';
+import type { WebhookCapability } from './capabilities/webhooks.js';
+import type { ForumCapability } from './capabilities/forums.js';
+import type { InviteCapability } from './capabilities/invites.js';
+import type { DMCapability } from './capabilities/dms.js';
+import type { ScheduledEventCapability } from './capabilities/scheduledEvents.js';
+import type { ScreeningCapability } from './capabilities/screening.js';
 
-export interface DiscordProvider {
+export interface DiscordProvider extends
+    ServerCapability,
+    ChannelCapability,
+    MessageCapability,
+    ReactionCapability,
+    MemberCapability,
+    RoleCapability,
+    ModerationCapability,
+    MonitoringCapability,
+    PermissionCapability,
+    WebhookCapability,
+    ForumCapability,
+    InviteCapability,
+    DMCapability,
+    ScheduledEventCapability,
+    ScreeningCapability {
     /** Provider identifier for logging/debugging */
     readonly name: string;
 
@@ -54,66 +57,6 @@ export interface DiscordProvider {
 
     /** Get the bot's own user ID */
     getBotUserId(): string;
-
-    // ─── Server / Guild ─────────────────────────────────────────
-
-    listGuilds(): Promise<DiscordGuild[]>;
-    getGuild(guildId: string): Promise<DiscordGuildDetailed>;
-
-    // ─── Channels ───────────────────────────────────────────────
-
-    getChannels(guildId: string): Promise<DiscordChannelSummary[]>;
-    getChannel(channelId: string): Promise<DiscordChannel>;
-    createChannel(options: CreateChannelOptions): Promise<DiscordChannel>;
-    editChannel(options: EditChannelOptions): Promise<DiscordChannel>;
-    deleteChannel(channelId: string, reason?: string): Promise<void>;
-
-    // ─── Threads ────────────────────────────────────────────────
-
-    createThread(options: CreateThreadOptions): Promise<DiscordChannel>;
-    archiveThread(threadId: string): Promise<void>;
-
-    // ─── Messages ───────────────────────────────────────────────
-
-    sendMessage(options: SendMessageOptions): Promise<DiscordMessage>;
-    readMessages(options: ReadMessagesOptions): Promise<PaginatedResult<DiscordMessage>>;
-    editMessage(channelId: string, messageId: string, content: string, embeds?: DiscordEmbed[]): Promise<DiscordMessage>;
-    deleteMessage(channelId: string, messageId: string, reason?: string): Promise<void>;
-    deleteMessagesBulk(channelId: string, messageIds: string[], reason?: string): Promise<number>;
-    pinMessage(channelId: string, messageId: string): Promise<void>;
-    unpinMessage(channelId: string, messageId: string): Promise<void>;
-    searchMessages(options: SearchMessagesOptions): Promise<PaginatedResult<DiscordMessage>>;
-
-    // ─── Reactions ──────────────────────────────────────────────
-
-    addReaction(channelId: string, messageId: string, emoji: string): Promise<void>;
-    removeReaction(channelId: string, messageId: string, emoji: string, userId?: string): Promise<void>;
-
-    // ─── Members / Users ────────────────────────────────────────
-
-    listMembers(guildId: string, limit?: number, after?: string): Promise<PaginatedResult<DiscordMember>>;
-    getMember(guildId: string, userId: string): Promise<DiscordMember>;
-    getUser(userId: string): Promise<DiscordUser>;
-    searchMembers(guildId: string, query: string, limit?: number): Promise<DiscordMember[]>;
-
-    // ─── Roles ──────────────────────────────────────────────────
-
-    listRoles(guildId: string): Promise<DiscordRole[]>;
-    createRole(options: CreateRoleOptions): Promise<DiscordRole>;
-    addRole(guildId: string, userId: string, roleId: string, reason?: string): Promise<void>;
-    removeRole(guildId: string, userId: string, roleId: string, reason?: string): Promise<void>;
-
-    // ─── Moderation ─────────────────────────────────────────────
-
-    timeoutUser(options: TimeoutOptions): Promise<void>;
-    kickUser(options: KickOptions): Promise<void>;
-    banUser(options: BanOptions): Promise<void>;
-    unbanUser(guildId: string, userId: string, reason?: string): Promise<void>;
-
-    // ─── Monitoring / Audit ─────────────────────────────────────
-
-    getAuditLog(guildId: string, limit?: number, actionType?: string): Promise<AuditLogEntry[]>;
-    checkMentions(guildId: string, userId?: string, limit?: number): Promise<DiscordMessage[]>;
 }
 
 /**

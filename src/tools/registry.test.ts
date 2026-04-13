@@ -2,6 +2,21 @@
 import { describe, it, expect, vi } from 'vitest';
 import { allTools, toolsByName, type ToolDefinition } from './registry.js';
 import type { DiscordProvider } from '../providers/discord-provider.js';
+import { makeServerStubs } from './__test_helpers__/stubs/server.js';
+import { makeChannelStubs } from './__test_helpers__/stubs/channels.js';
+import { makeMessageStubs } from './__test_helpers__/stubs/messages.js';
+import { makeReactionStubs } from './__test_helpers__/stubs/reactions.js';
+import { makeMemberStubs } from './__test_helpers__/stubs/members.js';
+import { makeRoleStubs } from './__test_helpers__/stubs/roles.js';
+import { makeModerationStubs } from './__test_helpers__/stubs/moderation.js';
+import { makeMonitoringStubs } from './__test_helpers__/stubs/monitoring.js';
+import { makePermissionStubs } from './__test_helpers__/stubs/permissions.js';
+import { makeWebhookStubs } from './__test_helpers__/stubs/webhooks.js';
+import { makeForumStubs } from './__test_helpers__/stubs/forums.js';
+import { makeInviteStubs } from './__test_helpers__/stubs/invites.js';
+import { makeDMStubs } from './__test_helpers__/stubs/dms.js';
+import { makeScheduledEventStubs } from './__test_helpers__/stubs/scheduledEvents.js';
+import { makeScreeningStubs } from './__test_helpers__/stubs/screening.js';
 
 // ─── Stub provider ──────────────────────────────────────────────
 
@@ -12,48 +27,21 @@ function makeStubProvider(): DiscordProvider {
         disconnect: vi.fn().mockResolvedValue(undefined),
         isReady: vi.fn().mockReturnValue(true),
         getBotUserId: vi.fn().mockReturnValue('1000'),
-
-        listGuilds: vi.fn().mockResolvedValue([]),
-        getGuild: vi.fn().mockResolvedValue({}),
-
-        getChannels: vi.fn().mockResolvedValue([]),
-        getChannel: vi.fn().mockResolvedValue({}),
-        createChannel: vi.fn().mockResolvedValue({ id: 'ch1' }),
-        editChannel: vi.fn().mockResolvedValue({ id: 'ch1' }),
-        deleteChannel: vi.fn().mockResolvedValue(undefined),
-
-        createThread: vi.fn().mockResolvedValue({ id: 'th1' }),
-        archiveThread: vi.fn().mockResolvedValue(undefined),
-
-        sendMessage: vi.fn().mockResolvedValue({ id: 'm1' }),
-        readMessages: vi.fn().mockResolvedValue({ items: [], hasMore: false }),
-        editMessage: vi.fn().mockResolvedValue({ id: 'm1' }),
-        deleteMessage: vi.fn().mockResolvedValue(undefined),
-        deleteMessagesBulk: vi.fn().mockResolvedValue(2),
-        pinMessage: vi.fn().mockResolvedValue(undefined),
-        unpinMessage: vi.fn().mockResolvedValue(undefined),
-        searchMessages: vi.fn().mockResolvedValue({ items: [], hasMore: false }),
-
-        addReaction: vi.fn().mockResolvedValue(undefined),
-        removeReaction: vi.fn().mockResolvedValue(undefined),
-
-        listMembers: vi.fn().mockResolvedValue({ items: [], hasMore: false }),
-        getMember: vi.fn().mockResolvedValue({}),
-        getUser: vi.fn().mockResolvedValue({}),
-        searchMembers: vi.fn().mockResolvedValue([]),
-
-        listRoles: vi.fn().mockResolvedValue([]),
-        createRole: vi.fn().mockResolvedValue({ id: 'r1' }),
-        addRole: vi.fn().mockResolvedValue(undefined),
-        removeRole: vi.fn().mockResolvedValue(undefined),
-
-        timeoutUser: vi.fn().mockResolvedValue(undefined),
-        kickUser: vi.fn().mockResolvedValue(undefined),
-        banUser: vi.fn().mockResolvedValue(undefined),
-        unbanUser: vi.fn().mockResolvedValue(undefined),
-
-        getAuditLog: vi.fn().mockResolvedValue([]),
-        checkMentions: vi.fn().mockResolvedValue([]),
+        ...makeServerStubs(),
+        ...makeChannelStubs(),
+        ...makeMessageStubs(),
+        ...makeReactionStubs(),
+        ...makeMemberStubs(),
+        ...makeRoleStubs(),
+        ...makeModerationStubs(),
+        ...makeMonitoringStubs(),
+        ...makePermissionStubs(),
+        ...makeWebhookStubs(),
+        ...makeForumStubs(),
+        ...makeInviteStubs(),
+        ...makeDMStubs(),
+        ...makeScheduledEventStubs(),
+        ...makeScreeningStubs(),
     };
 }
 
@@ -88,8 +76,8 @@ describe('snowflake ID schema', () => {
 });
 
 describe('tool registry', () => {
-    it('exposes all 33 tools via allTools', () => {
-        expect(allTools).toHaveLength(33);
+    it('exposes all tools via allTools', () => {
+        expect(allTools).toHaveLength(81);
     });
 
     it('has a unique name per tool', () => {
@@ -179,6 +167,7 @@ describe('channel tools', () => {
         await tool.handler(
             {
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 name: 'renamed',
                 topic: 'new',
                 nsfw: false,
@@ -213,6 +202,7 @@ describe('channel tools', () => {
         await tool.handler(
             {
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 name: 'thread',
                 message_id: MESSAGE,
                 auto_archive_duration: '1440',
@@ -311,6 +301,7 @@ describe('message tools', () => {
                 query: 'hello',
                 author_id: AUTHOR,
                 channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
                 limit: 10,
             },
             provider,
@@ -599,6 +590,75 @@ describe('moderation tools', () => {
     });
 });
 
+describe('screening tools', () => {
+    const GUILD = '123456789012345678';
+    const CHANNEL = '234567890123456789';
+    const EMOJI = '345678901234567890';
+
+    it('get_membership_screening calls provider.getWelcomeScreen with the guild_id', async () => {
+        const tool = findTool('get_membership_screening');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.getWelcomeScreen).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('get_membership_screening schema rejects missing guild_id', () => {
+        const tool = findTool('get_membership_screening');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('update_membership_screening transforms snake_case to camelCase', async () => {
+        const tool = findTool('update_membership_screening');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                enabled: true,
+                description: 'Welcome!',
+                welcome_channels: [
+                    { channel_id: CHANNEL, description: 'General chat', emoji_name: 'wave', emoji_id: EMOJI },
+                ],
+            },
+            provider,
+        );
+        expect(provider.updateWelcomeScreen).toHaveBeenCalledWith({
+            guildId: GUILD,
+            enabled: true,
+            description: 'Welcome!',
+            welcomeChannels: [
+                { channelId: CHANNEL, description: 'General chat', emojiName: 'wave', emojiId: EMOJI },
+            ],
+        });
+    });
+
+    it('update_membership_screening omits undefined optional fields', async () => {
+        const tool = findTool('update_membership_screening');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, enabled: false }, provider);
+        expect(provider.updateWelcomeScreen).toHaveBeenCalledWith({
+            guildId: GUILD,
+            enabled: false,
+            description: undefined,
+            welcomeChannels: undefined,
+        });
+    });
+
+    it('update_membership_screening schema rejects a welcome channel without channel_id', () => {
+        const tool = findTool('update_membership_screening');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                welcome_channels: [{ description: 'missing channel' }],
+            }),
+        ).toThrow();
+    });
+
+    it('update_membership_screening schema allows empty welcome_channels array', () => {
+        const tool = findTool('update_membership_screening');
+        expect(() => tool.schema.parse({ guild_id: GUILD, welcome_channels: [] })).not.toThrow();
+    });
+});
+
 describe('monitoring tools', () => {
     const GUILD = '123456789012345678';
     const USER = '567890123456789012';
@@ -621,5 +681,1027 @@ describe('monitoring tools', () => {
         const provider = makeStubProvider();
         await tool.handler({ guild_id: GUILD, user_id: USER, limit: 10 }, provider);
         expect(provider.checkMentions).toHaveBeenCalledWith(GUILD, USER, 10);
+    });
+});
+
+// ═════════════════════════════════════════════════════════════════
+// MEMBER ENHANCEMENT TOOLS
+// ═════════════════════════════════════════════════════════════════
+
+describe('member enhancement tools', () => {
+    const GUILD = '123456789012345678';
+    const USER = '567890123456789012';
+    const USER2 = '678901234567890123';
+    const USER3 = '789012345678901234';
+
+    it('set_nickname calls provider.setNickname and returns success', async () => {
+        const tool = findTool('set_nickname');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, user_id: USER, nickname: 'Cool Nick', reason: 'requested' },
+            provider,
+        );
+        expect(provider.setNickname).toHaveBeenCalledWith(GUILD, USER, 'Cool Nick', 'requested');
+        expect(result).toEqual({ success: true });
+    });
+
+    it('set_nickname schema rejects missing nickname', () => {
+        const tool = findTool('set_nickname');
+        expect(() => tool.schema.parse({ guild_id: GUILD, user_id: USER })).toThrow();
+    });
+
+    it('set_nickname accepts empty string to clear nickname', () => {
+        const tool = findTool('set_nickname');
+        expect(() => tool.schema.parse({ guild_id: GUILD, user_id: USER, nickname: '' })).not.toThrow();
+    });
+
+    it('bulk_ban calls provider.bulkBan and returns mapped result', async () => {
+        const tool = findTool('bulk_ban');
+        const provider = makeStubProvider();
+        (provider.bulkBan as ReturnType<typeof vi.fn>).mockResolvedValue({ bannedCount: 2, failed: [USER3] });
+        const result = await tool.handler(
+            { guild_id: GUILD, user_ids: [USER, USER2, USER3], reason: 'raid', delete_message_seconds: 3600 },
+            provider,
+        );
+        expect(provider.bulkBan).toHaveBeenCalledWith(GUILD, [USER, USER2, USER3], 'raid', 3600);
+        expect(result).toEqual({ success: true, banned_count: 2, failed: [USER3] });
+    });
+
+    it('bulk_ban schema rejects empty user_ids array', () => {
+        const tool = findTool('bulk_ban');
+        expect(() => tool.schema.parse({ guild_id: GUILD, user_ids: [] })).toThrow();
+    });
+
+    it('bulk_ban schema rejects more than 200 user_ids', () => {
+        const tool = findTool('bulk_ban');
+        const ids = Array.from({ length: 201 }, (_, i) => String(i).padStart(18, '1'));
+        expect(() => tool.schema.parse({ guild_id: GUILD, user_ids: ids })).toThrow();
+    });
+
+    it('list_bans defaults limit to 100', async () => {
+        const tool = findTool('list_bans');
+        const parsed = tool.schema.parse({ guild_id: GUILD });
+        expect(parsed.limit).toBe(100);
+
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, limit: 50 }, provider);
+        expect(provider.listBans).toHaveBeenCalledWith(GUILD, 50, undefined);
+    });
+
+    it('list_bans passes after parameter for pagination', async () => {
+        const tool = findTool('list_bans');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, limit: 10, after: USER }, provider);
+        expect(provider.listBans).toHaveBeenCalledWith(GUILD, 10, USER);
+    });
+
+    it('prune_members defaults dry_run to false and transforms result fields', async () => {
+        const tool = findTool('prune_members');
+        const parsed = tool.schema.parse({ guild_id: GUILD, days: 7 });
+        expect(parsed.dry_run).toBe(false);
+
+        const provider = makeStubProvider();
+        (provider.pruneMembers as ReturnType<typeof vi.fn>).mockResolvedValue({ prunedCount: 5, dryRun: false });
+        const result = await tool.handler({ guild_id: GUILD, days: 7, dry_run: false }, provider);
+        expect(provider.pruneMembers).toHaveBeenCalledWith(GUILD, 7, undefined, false);
+        expect(result).toEqual({ pruned_count: 5, dry_run: false });
+    });
+
+    it('prune_members passes include_roles and dry_run', async () => {
+        const tool = findTool('prune_members');
+        const provider = makeStubProvider();
+        (provider.pruneMembers as ReturnType<typeof vi.fn>).mockResolvedValue({ prunedCount: 12, dryRun: true });
+        const result = await tool.handler(
+            { guild_id: GUILD, days: 14, include_roles: [USER2], dry_run: true },
+            provider,
+        );
+        expect(provider.pruneMembers).toHaveBeenCalledWith(GUILD, 14, [USER2], true);
+        expect(result).toEqual({ pruned_count: 12, dry_run: true });
+    });
+
+    it('prune_members schema rejects days below 1', () => {
+        const tool = findTool('prune_members');
+        expect(() => tool.schema.parse({ guild_id: GUILD, days: 0 })).toThrow();
+    });
+
+    it('prune_members schema rejects days above 30', () => {
+        const tool = findTool('prune_members');
+        expect(() => tool.schema.parse({ guild_id: GUILD, days: 31 })).toThrow();
+    });
+
+    it('get_member_info calls provider.getMemberInfo', async () => {
+        const tool = findTool('get_member_info');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, user_id: USER }, provider);
+        expect(provider.getMemberInfo).toHaveBeenCalledWith(GUILD, USER);
+    });
+
+    it('get_member_info schema rejects missing user_id', () => {
+        const tool = findTool('get_member_info');
+        expect(() => tool.schema.parse({ guild_id: GUILD })).toThrow();
+    });
+});
+
+// ═════════════════════════════════════════════════════════════════
+// ROLE ENHANCEMENT TOOLS
+// ═════════════════════════════════════════════════════════════════
+
+describe('role enhancement tools', () => {
+    const GUILD = '123456789012345678';
+    const ROLE = '678901234567890123';
+
+    it('edit_role transforms snake_case inputs and calls provider.editRole', async () => {
+        const tool = findTool('edit_role');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                role_id: ROLE,
+                name: 'Admin',
+                color: 0xff0000,
+                permissions: ['ADMINISTRATOR', 'MANAGE_GUILD'],
+                hoist: true,
+                mentionable: false,
+            },
+            provider,
+        );
+        expect(provider.editRole).toHaveBeenCalledWith({
+            guildId: GUILD,
+            roleId: ROLE,
+            name: 'Admin',
+            color: 0xff0000,
+            permissions: ['ADMINISTRATOR', 'MANAGE_GUILD'],
+            hoist: true,
+            mentionable: false,
+        });
+    });
+
+    it('edit_role schema rejects invalid permission flag', () => {
+        const tool = findTool('edit_role');
+        expect(() =>
+            tool.schema.parse({ guild_id: GUILD, role_id: ROLE, permissions: ['INVALID_FLAG'] }),
+        ).toThrow();
+    });
+
+    it('edit_role schema allows no optional fields', () => {
+        const tool = findTool('edit_role');
+        expect(() => tool.schema.parse({ guild_id: GUILD, role_id: ROLE })).not.toThrow();
+    });
+
+    it('delete_role calls provider.deleteRole and returns success with role_id', async () => {
+        const tool = findTool('delete_role');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, role_id: ROLE, reason: 'obsolete' },
+            provider,
+        );
+        expect(provider.deleteRole).toHaveBeenCalledWith(GUILD, ROLE, 'obsolete');
+        expect(result).toEqual({ success: true, role_id: ROLE });
+    });
+
+    it('delete_role schema rejects missing role_id', () => {
+        const tool = findTool('delete_role');
+        expect(() => tool.schema.parse({ guild_id: GUILD })).toThrow();
+    });
+
+    it('get_role_members calls provider.getRoleMembers', async () => {
+        const tool = findTool('get_role_members');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, role_id: ROLE }, provider);
+        expect(provider.getRoleMembers).toHaveBeenCalledWith(GUILD, ROLE);
+    });
+
+    it('set_role_position calls provider.setRolePosition and returns success', async () => {
+        const tool = findTool('set_role_position');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, role_id: ROLE, position: 5 },
+            provider,
+        );
+        expect(provider.setRolePosition).toHaveBeenCalledWith(GUILD, ROLE, 5);
+        expect(result).toEqual({ success: true });
+    });
+
+    it('set_role_position schema rejects negative position', () => {
+        const tool = findTool('set_role_position');
+        expect(() => tool.schema.parse({ guild_id: GUILD, role_id: ROLE, position: -1 })).toThrow();
+    });
+
+    it('set_role_position schema rejects missing position', () => {
+        const tool = findTool('set_role_position');
+        expect(() => tool.schema.parse({ guild_id: GUILD, role_id: ROLE })).toThrow();
+    });
+
+    it('set_role_icon calls provider.setRoleIcon and returns success', async () => {
+        const tool = findTool('set_role_icon');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, role_id: ROLE, icon: '🎮' },
+            provider,
+        );
+        expect(provider.setRoleIcon).toHaveBeenCalledWith(GUILD, ROLE, '🎮');
+        expect(result).toEqual({ success: true });
+    });
+
+    it('set_role_icon accepts a URL', async () => {
+        const tool = findTool('set_role_icon');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { guild_id: GUILD, role_id: ROLE, icon: 'https://example.com/icon.png' },
+            provider,
+        );
+        expect(provider.setRoleIcon).toHaveBeenCalledWith(GUILD, ROLE, 'https://example.com/icon.png');
+    });
+
+    it('set_role_icon schema rejects missing icon', () => {
+        const tool = findTool('set_role_icon');
+        expect(() => tool.schema.parse({ guild_id: GUILD, role_id: ROLE })).toThrow();
+    });
+});
+
+describe('webhook tools', () => {
+    const CHANNEL = '234567890123456789';
+    const WEBHOOK = '345678901234567890';
+    const WEBHOOK_TOKEN = 'abc123token';
+    const MESSAGE = '456789012345678901';
+    const GUILD = '123456789012345678';
+
+    it('create_webhook transforms snake_case to camelCase', async () => {
+        const tool = findTool('create_webhook');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { channel_id: CHANNEL, name: 'my-hook', avatar: 'data:image/png;base64,abc' },
+            provider,
+        );
+        expect(provider.createWebhook).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            name: 'my-hook',
+            avatar: 'data:image/png;base64,abc',
+        });
+    });
+
+    it('create_webhook schema rejects missing name', () => {
+        const tool = findTool('create_webhook');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL })).toThrow();
+    });
+
+    it('create_webhook schema rejects name longer than 80 chars', () => {
+        const tool = findTool('create_webhook');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, name: 'a'.repeat(81) })).toThrow();
+    });
+
+    it('list_webhooks passes scope and id to provider', async () => {
+        const tool = findTool('list_webhooks');
+        const provider = makeStubProvider();
+        await tool.handler({ scope: 'guild', id: GUILD }, provider);
+        expect(provider.listWebhooks).toHaveBeenCalledWith('guild', GUILD);
+    });
+
+    it('list_webhooks passes channel scope', async () => {
+        const tool = findTool('list_webhooks');
+        const provider = makeStubProvider();
+        await tool.handler({ scope: 'channel', id: CHANNEL }, provider);
+        expect(provider.listWebhooks).toHaveBeenCalledWith('channel', CHANNEL);
+    });
+
+    it('list_webhooks schema rejects invalid scope', () => {
+        const tool = findTool('list_webhooks');
+        expect(() => tool.schema.parse({ scope: 'invalid', id: GUILD })).toThrow();
+    });
+
+    it('edit_webhook transforms snake_case to camelCase', async () => {
+        const tool = findTool('edit_webhook');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { webhook_id: WEBHOOK, name: 'renamed', channel_id: CHANNEL },
+            provider,
+        );
+        expect(provider.editWebhook).toHaveBeenCalledWith({
+            webhookId: WEBHOOK,
+            name: 'renamed',
+            avatar: undefined,
+            channelId: CHANNEL,
+        });
+    });
+
+    it('delete_webhook returns success payload and passes reason', async () => {
+        const tool = findTool('delete_webhook');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { webhook_id: WEBHOOK, reason: 'cleanup' },
+            provider,
+        );
+        expect(provider.deleteWebhook).toHaveBeenCalledWith(WEBHOOK, 'cleanup');
+        expect(result).toEqual({ success: true, webhook_id: WEBHOOK });
+    });
+
+    it('send_webhook_message transforms fields and passes to provider', async () => {
+        const tool = findTool('send_webhook_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                webhook_id: WEBHOOK,
+                webhook_token: WEBHOOK_TOKEN,
+                content: 'hello',
+                username: 'Bot',
+                avatar_url: 'https://example.com/avatar.png',
+            },
+            provider,
+        );
+        expect(provider.sendWebhookMessage).toHaveBeenCalledWith({
+            webhookId: WEBHOOK,
+            webhookToken: WEBHOOK_TOKEN,
+            content: 'hello',
+            embeds: undefined,
+            username: 'Bot',
+            avatarUrl: 'https://example.com/avatar.png',
+        });
+    });
+
+    it('send_webhook_message accepts embeds without content', async () => {
+        const tool = findTool('send_webhook_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                webhook_id: WEBHOOK,
+                webhook_token: WEBHOOK_TOKEN,
+                embeds: [{ title: 'test' }],
+            },
+            provider,
+        );
+        expect(provider.sendWebhookMessage).toHaveBeenCalledWith({
+            webhookId: WEBHOOK,
+            webhookToken: WEBHOOK_TOKEN,
+            content: undefined,
+            embeds: [{ title: 'test' }],
+            username: undefined,
+            avatarUrl: undefined,
+        });
+    });
+
+    it('send_webhook_message schema rejects missing webhook_token', () => {
+        const tool = findTool('send_webhook_message');
+        expect(() => tool.schema.parse({ webhook_id: WEBHOOK })).toThrow();
+    });
+
+    it('edit_webhook_message transforms fields and passes to provider', async () => {
+        const tool = findTool('edit_webhook_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                webhook_id: WEBHOOK,
+                webhook_token: WEBHOOK_TOKEN,
+                message_id: MESSAGE,
+                content: 'edited',
+            },
+            provider,
+        );
+        expect(provider.editWebhookMessage).toHaveBeenCalledWith({
+            webhookId: WEBHOOK,
+            webhookToken: WEBHOOK_TOKEN,
+            messageId: MESSAGE,
+            content: 'edited',
+            embeds: undefined,
+        });
+    });
+
+    it('delete_webhook_message returns success and calls provider', async () => {
+        const tool = findTool('delete_webhook_message');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { webhook_id: WEBHOOK, webhook_token: WEBHOOK_TOKEN, message_id: MESSAGE },
+            provider,
+        );
+        expect(provider.deleteWebhookMessage).toHaveBeenCalledWith(WEBHOOK, WEBHOOK_TOKEN, MESSAGE);
+        expect(result).toEqual({ success: true });
+    });
+
+    it('fetch_webhook_message calls provider with correct arguments', async () => {
+        const tool = findTool('fetch_webhook_message');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { webhook_id: WEBHOOK, webhook_token: WEBHOOK_TOKEN, message_id: MESSAGE },
+            provider,
+        );
+        expect(provider.fetchWebhookMessage).toHaveBeenCalledWith(WEBHOOK, WEBHOOK_TOKEN, MESSAGE);
+    });
+
+    it('fetch_webhook_message schema rejects missing message_id', () => {
+        const tool = findTool('fetch_webhook_message');
+        expect(() => tool.schema.parse({ webhook_id: WEBHOOK, webhook_token: WEBHOOK_TOKEN })).toThrow();
+    });
+});
+
+describe('permission tools', () => {
+    const CHANNEL = '234567890123456789';
+    const GUILD = '123456789012345678';
+    const ROLE = '678901234567890123';
+    const USER = '567890123456789012';
+    const SOURCE = '345678901234567890';
+    const TARGET = '456789012345678901';
+
+    it('get_channel_permissions calls provider.getChannelPermissions', async () => {
+        const tool = findTool('get_channel_permissions');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.getChannelPermissions).toHaveBeenCalledWith(CHANNEL);
+    });
+
+    it('get_channel_permissions schema rejects missing channel_id', () => {
+        const tool = findTool('get_channel_permissions');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('set_role_permission passes allow and deny arrays to provider', async () => {
+        const tool = findTool('set_role_permission');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            {
+                channel_id: CHANNEL,
+                role_id: ROLE,
+                allow: ['SEND_MESSAGES', 'VIEW_CHANNEL'],
+                deny: ['MANAGE_CHANNELS'],
+            },
+            provider,
+        );
+        expect(provider.setRolePermission).toHaveBeenCalledWith(
+            CHANNEL,
+            ROLE,
+            ['SEND_MESSAGES', 'VIEW_CHANNEL'],
+            ['MANAGE_CHANNELS'],
+        );
+        expect(result).toEqual({ success: true, channel_id: CHANNEL, role_id: ROLE });
+    });
+
+    it('set_role_permission defaults allow and deny to empty arrays', () => {
+        const tool = findTool('set_role_permission');
+        const parsed = tool.schema.parse({ channel_id: CHANNEL, role_id: ROLE });
+        expect(parsed.allow).toEqual([]);
+        expect(parsed.deny).toEqual([]);
+    });
+
+    it('set_role_permission schema rejects invalid permission flag', () => {
+        const tool = findTool('set_role_permission');
+        expect(() =>
+            tool.schema.parse({ channel_id: CHANNEL, role_id: ROLE, allow: ['BOGUS_FLAG'] }),
+        ).toThrow();
+    });
+
+    it('set_member_permission passes allow and deny arrays to provider', async () => {
+        const tool = findTool('set_member_permission');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            {
+                channel_id: CHANNEL,
+                user_id: USER,
+                allow: ['READ_MESSAGE_HISTORY'],
+                deny: ['SEND_MESSAGES'],
+            },
+            provider,
+        );
+        expect(provider.setMemberPermission).toHaveBeenCalledWith(
+            CHANNEL,
+            USER,
+            ['READ_MESSAGE_HISTORY'],
+            ['SEND_MESSAGES'],
+        );
+        expect(result).toEqual({ success: true, channel_id: CHANNEL, user_id: USER });
+    });
+
+    it('set_member_permission defaults allow and deny to empty arrays', () => {
+        const tool = findTool('set_member_permission');
+        const parsed = tool.schema.parse({ channel_id: CHANNEL, user_id: USER });
+        expect(parsed.allow).toEqual([]);
+        expect(parsed.deny).toEqual([]);
+    });
+
+    it('reset_channel_permissions returns success with channel_id', async () => {
+        const tool = findTool('reset_channel_permissions');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.resetChannelPermissions).toHaveBeenCalledWith(CHANNEL);
+        expect(result).toEqual({ success: true, channel_id: CHANNEL });
+    });
+
+    it('copy_permissions returns success and passes source and target', async () => {
+        const tool = findTool('copy_permissions');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { source_channel_id: SOURCE, target_channel_id: TARGET },
+            provider,
+        );
+        expect(provider.copyPermissions).toHaveBeenCalledWith(SOURCE, TARGET);
+        expect(result).toEqual({ success: true, source_channel_id: SOURCE, target_channel_id: TARGET });
+    });
+
+    it('copy_permissions schema rejects missing target_channel_id', () => {
+        const tool = findTool('copy_permissions');
+        expect(() => tool.schema.parse({ source_channel_id: SOURCE })).toThrow();
+    });
+
+    it('audit_permissions returns provider result directly', async () => {
+        const tool = findTool('audit_permissions');
+        const provider = makeStubProvider();
+        const mockAudit = [{ channel_id: CHANNEL, overwrites: [] }];
+        (provider.auditPermissions as ReturnType<typeof vi.fn>).mockResolvedValue(mockAudit);
+        const result = await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.auditPermissions).toHaveBeenCalledWith(GUILD);
+        expect(result).toEqual(mockAudit);
+    });
+
+    it('audit_permissions schema rejects missing guild_id', () => {
+        const tool = findTool('audit_permissions');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+});
+
+describe('forum tools', () => {
+    const GUILD = '123456789012345678';
+    const CHANNEL = '234567890123456789';
+    const POST = '345678901234567890';
+    const TAG_A = '456789012345678901';
+    const TAG_B = '567890123456789012';
+
+    it('get_forum_channels calls provider.getForumChannels with guild_id', async () => {
+        const tool = findTool('get_forum_channels');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.getForumChannels).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('get_forum_channels schema rejects missing guild_id', () => {
+        const tool = findTool('get_forum_channels');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('create_forum_post transforms snake_case to camelCase and converts auto_archive_duration', async () => {
+        const tool = findTool('create_forum_post');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                channel_id: CHANNEL,
+                name: 'New topic',
+                content: 'First post body',
+                tag_ids: [TAG_A, TAG_B],
+                auto_archive_duration: '1440',
+            },
+            provider,
+        );
+        expect(provider.createForumPost).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            name: 'New topic',
+            content: 'First post body',
+            tagIds: [TAG_A, TAG_B],
+            autoArchiveDuration: 1440,
+        });
+    });
+
+    it('create_forum_post schema requires name and content', () => {
+        const tool = findTool('create_forum_post');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL })).toThrow();
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, name: 'x' })).toThrow();
+    });
+
+    it('create_forum_post schema rejects invalid auto_archive_duration', () => {
+        const tool = findTool('create_forum_post');
+        expect(() => tool.schema.parse({
+            channel_id: CHANNEL,
+            name: 'x',
+            content: 'y',
+            auto_archive_duration: '99',
+        })).toThrow();
+    });
+
+    it('get_forum_post calls provider.getForumPost', async () => {
+        const tool = findTool('get_forum_post');
+        const provider = makeStubProvider();
+        await tool.handler({ post_id: POST }, provider);
+        expect(provider.getForumPost).toHaveBeenCalledWith(POST);
+    });
+
+    it('list_forum_threads passes archived and limit', async () => {
+        const tool = findTool('list_forum_threads');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL, archived: true, limit: 10 }, provider);
+        expect(provider.listForumThreads).toHaveBeenCalledWith(CHANNEL, true, 10);
+    });
+
+    it('list_forum_threads rejects limit greater than 100', () => {
+        const tool = findTool('list_forum_threads');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, limit: 101 })).toThrow();
+    });
+
+    it('delete_forum_post returns success payload', async () => {
+        const tool = findTool('delete_forum_post');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ post_id: POST, reason: 'spam' }, provider);
+        expect(provider.deleteForumPost).toHaveBeenCalledWith(POST, 'spam');
+        expect(result).toEqual({ success: true, post_id: POST });
+    });
+
+    it('get_forum_tags calls provider.getForumTags', async () => {
+        const tool = findTool('get_forum_tags');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.getForumTags).toHaveBeenCalledWith(CHANNEL);
+    });
+
+    it('set_forum_tags passes tags array to provider', async () => {
+        const tool = findTool('set_forum_tags');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                channel_id: CHANNEL,
+                tags: [
+                    { name: 'Bug', moderated: true },
+                    { name: 'Feature', emoji: { name: '💡' } },
+                ],
+            },
+            provider,
+        );
+        expect(provider.setForumTags).toHaveBeenCalledWith(CHANNEL, [
+            { name: 'Bug', moderated: true },
+            { name: 'Feature', emoji: { name: '💡' } },
+        ]);
+    });
+
+    it('set_forum_tags schema requires tag name', () => {
+        const tool = findTool('set_forum_tags');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, tags: [{ moderated: true }] })).toThrow();
+    });
+
+    it('update_forum_post transforms applied_tag_ids to appliedTagIds', async () => {
+        const tool = findTool('update_forum_post');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                post_id: POST,
+                name: 'Renamed',
+                archived: true,
+                locked: false,
+                applied_tag_ids: [TAG_A],
+            },
+            provider,
+        );
+        expect(provider.updateForumPost).toHaveBeenCalledWith({
+            postId: POST,
+            name: 'Renamed',
+            archived: true,
+            locked: false,
+            appliedTagIds: [TAG_A],
+        });
+    });
+
+    it('reply_to_forum transforms content and embeds', async () => {
+        const tool = findTool('reply_to_forum');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { post_id: POST, content: 'hello', embeds: [{ title: 'hi' }] },
+            provider,
+        );
+        expect(provider.replyToForum).toHaveBeenCalledWith({
+            postId: POST,
+            content: 'hello',
+            embeds: [{ title: 'hi' }],
+        });
+    });
+
+    it('create_forum_post leaves autoArchiveDuration undefined when omitted', async () => {
+        const tool = findTool('create_forum_post');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL, name: 'x', content: 'y' }, provider);
+        expect(provider.createForumPost).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            name: 'x',
+            content: 'y',
+            tagIds: undefined,
+            autoArchiveDuration: undefined,
+        });
+    });
+
+    it('list_forum_threads defaults archived and limit to undefined', async () => {
+        const tool = findTool('list_forum_threads');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.listForumThreads).toHaveBeenCalledWith(CHANNEL, undefined, undefined);
+    });
+
+    it('delete_forum_post passes undefined reason when omitted', async () => {
+        const tool = findTool('delete_forum_post');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ post_id: POST }, provider);
+        expect(provider.deleteForumPost).toHaveBeenCalledWith(POST, undefined);
+        expect(result).toEqual({ success: true, post_id: POST });
+    });
+
+    it('set_forum_tags accepts empty tags array', () => {
+        const tool = findTool('set_forum_tags');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, tags: [] })).not.toThrow();
+    });
+});
+
+describe('invite tools', () => {
+    const GUILD = '123456789012345678';
+    const CHANNEL = '234567890123456789';
+    const CODE = 'abc123';
+
+    it('list_invites calls provider.listInvites with the guild_id', async () => {
+        const tool = findTool('list_invites');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.listInvites).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('list_invites schema rejects missing guild_id', () => {
+        const tool = findTool('list_invites');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('list_channel_invites calls provider.listChannelInvites with the channel_id', async () => {
+        const tool = findTool('list_channel_invites');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.listChannelInvites).toHaveBeenCalledWith(CHANNEL);
+    });
+
+    it('get_invite calls provider.getInvite with the code', async () => {
+        const tool = findTool('get_invite');
+        const provider = makeStubProvider();
+        await tool.handler({ code: CODE }, provider);
+        expect(provider.getInvite).toHaveBeenCalledWith(CODE);
+    });
+
+    it('get_invite schema rejects missing code', () => {
+        const tool = findTool('get_invite');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('create_invite transforms snake_case to camelCase', async () => {
+        const tool = findTool('create_invite');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                channel_id: CHANNEL,
+                max_uses: 10,
+                max_age: 3600,
+                temporary: true,
+                unique: false,
+            },
+            provider,
+        );
+        expect(provider.createInvite).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            maxUses: 10,
+            maxAge: 3600,
+            temporary: true,
+            unique: false,
+        });
+    });
+
+    it('create_invite accepts only channel_id', async () => {
+        const tool = findTool('create_invite');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL }, provider);
+        expect(provider.createInvite).toHaveBeenCalledWith({
+            channelId: CHANNEL,
+            maxUses: undefined,
+            maxAge: undefined,
+            temporary: undefined,
+            unique: undefined,
+        });
+    });
+
+    it('create_invite schema rejects non-number max_uses', () => {
+        const tool = findTool('create_invite');
+        expect(() => tool.schema.parse({ channel_id: CHANNEL, max_uses: 'lots' })).toThrow();
+    });
+
+    it('delete_invite returns success payload and passes reason', async () => {
+        const tool = findTool('delete_invite');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ code: CODE, reason: 'revoked' }, provider);
+        expect(provider.deleteInvite).toHaveBeenCalledWith(CODE, 'revoked');
+        expect(result).toEqual({ success: true, code: CODE });
+    });
+});
+
+describe('dm tools', () => {
+    const USER = '567890123456789012';
+
+    it('send_dm calls provider.sendDM with camelCase fields', async () => {
+        const tool = findTool('send_dm');
+        const provider = makeStubProvider();
+        await tool.handler({ user_id: USER, content: 'hi' }, provider);
+        expect(provider.sendDM).toHaveBeenCalledWith({
+            userId: USER,
+            content: 'hi',
+            embeds: undefined,
+        });
+    });
+
+    it('send_dm accepts embeds without content', async () => {
+        const tool = findTool('send_dm');
+        const provider = makeStubProvider();
+        await tool.handler({ user_id: USER, embeds: [{ title: 'hi' }] }, provider);
+        expect(provider.sendDM).toHaveBeenCalledWith({
+            userId: USER,
+            content: undefined,
+            embeds: [{ title: 'hi' }],
+        });
+    });
+
+    it('send_dm schema rejects missing user_id', () => {
+        const tool = findTool('send_dm');
+        expect(() => tool.schema.parse({ content: 'hi' })).toThrow();
+    });
+});
+
+describe('scheduled event tools', () => {
+    const GUILD = '123456789012345678';
+    const EVENT = '234567890123456789';
+    const CHANNEL = '345678901234567890';
+    const START = '2030-01-01T00:00:00Z';
+    const END = '2030-01-01T02:00:00Z';
+
+    it('list_scheduled_events calls provider.listScheduledEvents with guild_id', async () => {
+        const tool = findTool('list_scheduled_events');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD }, provider);
+        expect(provider.listScheduledEvents).toHaveBeenCalledWith(GUILD);
+    });
+
+    it('list_scheduled_events schema rejects missing guild_id', () => {
+        const tool = findTool('list_scheduled_events');
+        expect(() => tool.schema.parse({})).toThrow();
+    });
+
+    it('get_scheduled_event passes guild_id and event_id', async () => {
+        const tool = findTool('get_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, event_id: EVENT }, provider);
+        expect(provider.getScheduledEvent).toHaveBeenCalledWith(GUILD, EVENT);
+    });
+
+    it('create_scheduled_event transforms snake_case to camelCase and maps entity_type to uppercase', async () => {
+        const tool = findTool('create_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                name: 'Raid Night',
+                entity_type: 'voice',
+                scheduled_start_time: START,
+                channel_id: CHANNEL,
+                privacy_level: 'GUILD_ONLY',
+                description: 'Come hang out',
+            },
+            provider,
+        );
+        expect(provider.createScheduledEvent).toHaveBeenCalledWith({
+            guildId: GUILD,
+            name: 'Raid Night',
+            entityType: 'VOICE',
+            scheduledStartTime: START,
+            scheduledEndTime: undefined,
+            description: 'Come hang out',
+            channelId: CHANNEL,
+            location: undefined,
+            privacyLevel: 'GUILD_ONLY',
+        });
+    });
+
+    it('create_scheduled_event accepts external with location and end time', async () => {
+        const tool = findTool('create_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                name: 'Meetup',
+                entity_type: 'external',
+                scheduled_start_time: START,
+                scheduled_end_time: END,
+                location: 'Central Park',
+                privacy_level: 'GUILD_ONLY',
+            },
+            provider,
+        );
+        expect(provider.createScheduledEvent).toHaveBeenCalledWith({
+            guildId: GUILD,
+            name: 'Meetup',
+            entityType: 'EXTERNAL',
+            scheduledStartTime: START,
+            scheduledEndTime: END,
+            description: undefined,
+            channelId: undefined,
+            location: 'Central Park',
+            privacyLevel: 'GUILD_ONLY',
+        });
+    });
+
+    it('create_scheduled_event schema rejects invalid entity_type', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'bogus',
+                scheduled_start_time: START,
+            }),
+        ).toThrow();
+    });
+
+    it('create_scheduled_event schema rejects voice/stage without channel_id', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'voice',
+                scheduled_start_time: START,
+            }),
+        ).toThrow();
+    });
+
+    it('create_scheduled_event schema rejects external without location', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'external',
+                scheduled_start_time: START,
+                scheduled_end_time: END,
+            }),
+        ).toThrow();
+    });
+
+    it('create_scheduled_event schema rejects external without scheduled_end_time', () => {
+        const tool = findTool('create_scheduled_event');
+        expect(() =>
+            tool.schema.parse({
+                guild_id: GUILD,
+                name: 'x',
+                entity_type: 'external',
+                scheduled_start_time: START,
+                location: 'Somewhere',
+            }),
+        ).toThrow();
+    });
+
+    it('edit_scheduled_event forwards only provided fields', async () => {
+        const tool = findTool('edit_scheduled_event');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                event_id: EVENT,
+                name: 'New Name',
+                description: 'Updated',
+            },
+            provider,
+        );
+        expect(provider.editScheduledEvent).toHaveBeenCalledWith({
+            guildId: GUILD,
+            eventId: EVENT,
+            name: 'New Name',
+            description: 'Updated',
+            entityType: undefined,
+            scheduledStartTime: undefined,
+            scheduledEndTime: undefined,
+            channelId: undefined,
+            location: undefined,
+            privacyLevel: undefined,
+        });
+    });
+
+    it('delete_scheduled_event returns success payload', async () => {
+        const tool = findTool('delete_scheduled_event');
+        const provider = makeStubProvider();
+        const result = await tool.handler({ guild_id: GUILD, event_id: EVENT }, provider);
+        expect(provider.deleteScheduledEvent).toHaveBeenCalledWith(GUILD, EVENT);
+        expect(result).toEqual({ success: true, event_id: EVENT });
+    });
+
+    it('get_event_subscribers passes guild_id, event_id, and optional limit', async () => {
+        const tool = findTool('get_event_subscribers');
+        const provider = makeStubProvider();
+        await tool.handler({ guild_id: GUILD, event_id: EVENT, limit: 50 }, provider);
+        expect(provider.getEventSubscribers).toHaveBeenCalledWith(GUILD, EVENT, 50);
+    });
+
+    it('get_event_subscribers rejects limit greater than 100', () => {
+        const tool = findTool('get_event_subscribers');
+        expect(() => tool.schema.parse({ guild_id: GUILD, event_id: EVENT, limit: 101 })).toThrow();
+    });
+
+    it('create_event_invite calls provider.createEventInvite with guild/event/channel', async () => {
+        const tool = findTool('create_event_invite');
+        const provider = makeStubProvider();
+        const result = await tool.handler(
+            { guild_id: GUILD, event_id: EVENT, channel_id: CHANNEL },
+            provider,
+        );
+        expect(provider.createEventInvite).toHaveBeenCalledWith(GUILD, EVENT, CHANNEL);
+        expect(result).toEqual({ code: 'abc', url: 'https://discord.gg/abc?event=ev1', eventId: 'ev1' });
     });
 });

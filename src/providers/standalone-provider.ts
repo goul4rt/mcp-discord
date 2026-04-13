@@ -17,10 +17,12 @@
 import {
     Client,
     GatewayIntentBits,
+    PermissionFlagsBits,
     REST,
     Routes,
     ChannelType as DjsChannelType,
     type TextChannel,
+    type ForumChannel,
     type Guild,
     type GuildMember,
     type Message,
@@ -30,14 +32,29 @@ import {
     type ThreadChannel,
 } from 'discord.js';
 
+function permissionFlagsToBitfield(flags: string[]): string {
+    let bits = 0n;
+    for (const flag of flags) {
+        const value = (PermissionFlagsBits as Record<string, bigint>)[flag];
+        if (value !== undefined) bits |= value;
+    }
+    return bits.toString();
+}
+
 import type { DiscordProvider, StandaloneProviderConfig } from './discord-provider.js';
+import type { EditRoleOptions } from './capabilities/roles.js';
 import { ProviderDefaults } from './base-provider.js';
 import type {
     AuditLogEntry,
+    Ban,
     BanOptions,
+    ChannelPermissionsAudit,
     CreateChannelOptions,
+    CreateForumPostOptions,
+    CreateInviteOptions,
     CreateRoleOptions,
     CreateThreadOptions,
+    CreateWebhookOptions,
     DiscordChannel,
     DiscordChannelSummary,
     DiscordEmbed,
@@ -48,15 +65,60 @@ import type {
     DiscordRole,
     DiscordUser,
     EditChannelOptions,
+    EditWebhookMessageOptions,
+    EditWebhookOptions,
+    ForumPost,
+    ForumTag,
+    ForumTagInput,
+    Invite,
     KickOptions,
     PaginatedResult,
+    PermissionOverwrite,
     ReadMessagesOptions,
+    ReplyToForumOptions,
+    ScheduledEvent,
     SearchMessagesOptions,
     SendMessageOptions,
+    SendWebhookMessageOptions,
     TimeoutOptions,
+    UpdateForumPostOptions,
+    UpdateWelcomeScreenOptions,
     ChannelType,
+    Webhook,
+    WelcomeScreen,
 } from '../types/discord.js';
-import { mapChannel, mapChannelSummary, mapGuild, mapGuildDetailed, mapMember, mapMessage, mapRole, mapUser, mapChannelType, mapApiMessage } from '../utils/mappers.js';
+import type { SendDMOptions } from './capabilities/dms.js';
+import type {
+    CreateScheduledEventOptions,
+    EditScheduledEventOptions,
+    ScheduledEventInvite,
+} from './capabilities/scheduledEvents.js';
+import {
+    mapApiBan,
+    mapApiForumPost,
+    mapApiForumTag,
+    mapApiInvite,
+    mapApiMember,
+    mapApiMessage,
+    mapApiPermissionOverwrite,
+    mapApiScheduledEvent,
+    mapApiWebhook,
+    mapApiWelcomeScreen,
+    mapBan,
+    mapChannel,
+    mapChannelSummary,
+    mapChannelType,
+    mapForumPost,
+    mapForumTag,
+    mapGuild,
+    mapGuildDetailed,
+    mapMember,
+    mapMessage,
+    mapRole,
+    mapUser,
+    mapWebhook,
+    permissionNamesToBitfield,
+} from '../utils/mappers.js';
 
 export class StandaloneProvider implements DiscordProvider {
     readonly name = 'standalone';
@@ -568,6 +630,86 @@ export class StandaloneProvider implements DiscordProvider {
         }));
     }
 
+    async setNickname(guildId: string, userId: string, nickname: string, reason?: string): Promise<void> {
+        await this.rest.patch(Routes.guildMember(guildId, userId), {
+            body: { nick: nickname || null },
+            reason,
+        });
+    }
+
+    async bulkBan(
+        guildId: string,
+        userIds: string[],
+        reason?: string,
+        deleteMessageSeconds?: number
+    ): Promise<{ bannedCount: number; failed: string[] }> {
+        const body: any = { user_ids: userIds };
+        if (deleteMessageSeconds !== undefined) body.delete_message_seconds = deleteMessageSeconds;
+        const result = (await this.rest.post(`/guilds/${guildId}/bulk-ban`, {
+            body,
+            reason,
+        })) as any;
+        const banned = (result?.banned_users ?? []) as string[];
+        const failed = (result?.failed_users ?? []) as string[];
+        return { bannedCount: banned.length, failed };
+    }
+
+    async listBans(guildId: string, limit = 100, after?: string): Promise<PaginatedResult<Ban>> {
+        const query = new URLSearchParams({ limit: String(limit) });
+        if (after) query.set('after', after);
+        const bans = (await this.rest.get(Routes.guildBans(guildId), { query })) as any[];
+        const items = bans.map(b => mapApiBan(b));
+        return {
+            items,
+            hasMore: items.length === limit,
+        };
+    }
+
+    async pruneMembers(
+        guildId: string,
+        days: number,
+        includeRoles?: string[],
+        dryRun?: boolean
+    ): Promise<{ prunedCount: number; dryRun: boolean }> {
+        const body: any = { days, compute_prune_count: true };
+        if (includeRoles?.length) body.include_roles = includeRoles;
+        const isDry = dryRun ?? false;
+        const result = isDry
+            ? ((await this.rest.get(Routes.guildPrune(guildId), {
+                query: new URLSearchParams({
+                    days: String(days),
+                    ...(includeRoles?.length ? { include_roles: includeRoles.join(',') } : {}),
+                }),
+            })) as any)
+            : ((await this.rest.post(Routes.guildPrune(guildId), { body })) as any);
+        return { prunedCount: result?.pruned ?? 0, dryRun: isDry };
+    }
+
+    async getMemberInfo(guildId: string, userId: string): Promise<DiscordMember> {
+        if (this.client) {
+            const guild = await this.resolveGuild(guildId);
+            const member = await guild.members.fetch(userId);
+            const base = mapMember(member);
+            const voice = member.voice;
+            return {
+                ...base,
+                premiumSince: member.premiumSince?.toISOString() ?? null,
+                pending: member.pending,
+                voiceState: voice?.channelId
+                    ? {
+                        channelId: voice.channelId,
+                        selfMute: voice.selfMute ?? false,
+                        selfDeaf: voice.selfDeaf ?? false,
+                        serverMute: voice.serverMute ?? false,
+                        serverDeaf: voice.serverDeaf ?? false,
+                    }
+                    : null,
+            };
+        }
+        const m = (await this.rest.get(Routes.guildMember(guildId, userId))) as any;
+        return mapApiMember(m);
+    }
+
     // ─── Roles ──────────────────────────────────────────────────
 
     async listRoles(guildId: string): Promise<DiscordRole[]> {
@@ -627,6 +769,79 @@ export class StandaloneProvider implements DiscordProvider {
         await this.rest.delete(Routes.guildMemberRole(guildId, userId, roleId), { reason });
     }
 
+    async editRole(options: EditRoleOptions): Promise<DiscordRole> {
+        const body: any = {};
+        if (options.name !== undefined) body.name = options.name;
+        if (options.color !== undefined) body.color = options.color;
+        if (options.hoist !== undefined) body.hoist = options.hoist;
+        if (options.mentionable !== undefined) body.mentionable = options.mentionable;
+        if (options.permissions !== undefined) {
+            body.permissions = permissionNamesToBitfield(options.permissions);
+        }
+        const r = (await this.rest.patch(Routes.guildRole(options.guildId, options.roleId), {
+            body,
+        })) as any;
+        return {
+            id: r.id,
+            name: r.name,
+            color: r.color,
+            position: r.position,
+            permissions: r.permissions,
+            mentionable: r.mentionable,
+            managed: r.managed,
+        };
+    }
+
+    async deleteRole(guildId: string, roleId: string, reason?: string): Promise<void> {
+        await this.rest.delete(Routes.guildRole(guildId, roleId), { reason });
+    }
+
+    async getRoleMembers(guildId: string, roleId: string): Promise<DiscordMember[]> {
+        if (this.client) {
+            const guild = await this.resolveGuild(guildId);
+            const role = await guild.roles.fetch(roleId);
+            if (!role) throw new Error(`Role ${roleId} not found`);
+            // Fetch all guild members to populate the cache; role.members only
+            // returns currently cached members which may be incomplete on large guilds.
+            await guild.members.fetch();
+            return role.members.map(m => mapMember(m));
+        }
+        const members: any[] = [];
+        let after: string | undefined;
+        // Paginate through guild members (REST lacks a direct role-members endpoint).
+        for (;;) {
+            const query = new URLSearchParams({ limit: '1000' });
+            if (after) query.set('after', after);
+            const page = (await this.rest.get(Routes.guildMembers(guildId), { query })) as any[];
+            if (page.length === 0) break;
+            for (const m of page) {
+                if ((m.roles ?? []).includes(roleId)) members.push(m);
+            }
+            if (page.length < 1000) break;
+            after = page[page.length - 1].user.id;
+        }
+        return members.map(m => mapApiMember(m));
+    }
+
+    async setRolePosition(guildId: string, roleId: string, position: number): Promise<void> {
+        await this.rest.patch(Routes.guildRoles(guildId), {
+            body: [{ id: roleId, position }],
+        });
+    }
+
+    async setRoleIcon(guildId: string, roleId: string, icon: string): Promise<void> {
+        if (/^https?:\/\//i.test(icon)) {
+            throw new Error(
+                'Plain image URLs are not supported for role icons. ' +
+                'Provide a base64 Data URI (e.g. "data:image/png;base64,...") or a Unicode emoji.',
+            );
+        }
+        const body: any = /^data:/i.test(icon)
+            ? { icon }
+            : { unicode_emoji: icon };
+        await this.rest.patch(Routes.guildRole(guildId, roleId), { body });
+    }
+
     // ─── Moderation ─────────────────────────────────────────────
 
     async timeoutUser(options: TimeoutOptions): Promise<void> {
@@ -678,6 +893,541 @@ export class StandaloneProvider implements DiscordProvider {
 
     async checkMentions(guildId: string, userId?: string, limit = 25): Promise<DiscordMessage[]> {
         return ProviderDefaults.checkMentions(this, guildId, userId, limit);
+    }
+
+    // ─── Permissions ─────────────────────────────────────────────
+
+    async getChannelPermissions(channelId: string): Promise<PermissionOverwrite[]> {
+        const c = (await this.rest.get(Routes.channel(channelId))) as any;
+        return (c.permission_overwrites ?? []).map((o: any) => mapApiPermissionOverwrite(o));
+    }
+
+    async setRolePermission(
+        channelId: string,
+        roleId: string,
+        allow: string[],
+        deny: string[],
+    ): Promise<void> {
+        await this.rest.put(`/channels/${channelId}/permissions/${roleId}`, {
+            body: {
+                type: 0,
+                allow: permissionNamesToBitfield(allow),
+                deny: permissionNamesToBitfield(deny),
+            },
+        });
+    }
+
+    async setMemberPermission(
+        channelId: string,
+        userId: string,
+        allow: string[],
+        deny: string[],
+    ): Promise<void> {
+        await this.rest.put(`/channels/${channelId}/permissions/${userId}`, {
+            body: {
+                type: 1,
+                allow: permissionNamesToBitfield(allow),
+                deny: permissionNamesToBitfield(deny),
+            },
+        });
+    }
+
+    async resetChannelPermissions(channelId: string): Promise<void> {
+        const c = (await this.rest.get(Routes.channel(channelId))) as any;
+        const overwrites = (c.permission_overwrites ?? []) as any[];
+        for (const o of overwrites) {
+            await this.rest.delete(`/channels/${channelId}/permissions/${o.id}`);
+        }
+    }
+
+    async copyPermissions(sourceChannelId: string, targetChannelId: string): Promise<void> {
+        const source = (await this.rest.get(Routes.channel(sourceChannelId))) as any;
+        const sourceOverwrites = (source.permission_overwrites ?? []) as any[];
+        const sourceIds = new Set(sourceOverwrites.map((o: any) => o.id as string));
+
+        // Fetch target channel to find stale overwrites that need removal.
+        const target = (await this.rest.get(Routes.channel(targetChannelId))) as any;
+        const targetOverwrites = (target.permission_overwrites ?? []) as any[];
+
+        // Delete target-only overwrites so the target matches the source exactly.
+        for (const o of targetOverwrites) {
+            if (!sourceIds.has(o.id)) {
+                await this.rest.delete(`/channels/${targetChannelId}/permissions/${o.id}`);
+            }
+        }
+
+        // Upsert source overwrites into the target.
+        for (const o of sourceOverwrites) {
+            await this.rest.put(`/channels/${targetChannelId}/permissions/${o.id}`, {
+                body: {
+                    type: Number(o.type),
+                    allow: String(o.allow ?? '0'),
+                    deny: String(o.deny ?? '0'),
+                },
+            });
+        }
+    }
+
+    async auditPermissions(guildId: string): Promise<ChannelPermissionsAudit[]> {
+        const channels = (await this.rest.get(Routes.guildChannels(guildId))) as any[];
+        return channels.map(c => ({
+            channelId: c.id,
+            channelName: c.name,
+            overwrites: (c.permission_overwrites ?? []).map((o: any) => mapApiPermissionOverwrite(o)),
+        }));
+    }
+
+    // ─── Webhooks ────────────────────────────────────────────────
+
+    async createWebhook(options: CreateWebhookOptions): Promise<Webhook> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(options.channelId);
+            if (!channel || !('createWebhook' in channel)) {
+                throw new Error(`Channel ${options.channelId} does not support webhooks`);
+            }
+            const webhook = await (channel as TextChannel).createWebhook({
+                name: options.name,
+                avatar: options.avatar,
+                reason: options.reason,
+            });
+            return mapWebhook(webhook);
+        }
+        const body: any = { name: options.name };
+        if (options.avatar) body.avatar = options.avatar;
+        const wh = await this.rest.post(Routes.channelWebhooks(options.channelId), {
+            body,
+            reason: options.reason,
+        });
+        return mapApiWebhook(wh);
+    }
+
+    async listWebhooks(scope: 'channel' | 'guild', id: string): Promise<Webhook[]> {
+        if (this.client) {
+            if (scope === 'guild') {
+                const guild = await this.resolveGuild(id);
+                const webhooks = await guild.fetchWebhooks();
+                return webhooks.map(w => mapWebhook(w));
+            }
+            const channel = await this.client.channels.fetch(id);
+            if (!channel || !('fetchWebhooks' in channel)) {
+                throw new Error(`Channel ${id} does not support webhooks`);
+            }
+            const webhooks = await (channel as TextChannel).fetchWebhooks();
+            return webhooks.map(w => mapWebhook(w));
+        }
+        const route = scope === 'guild'
+            ? Routes.guildWebhooks(id)
+            : Routes.channelWebhooks(id);
+        const webhooks = (await this.rest.get(route)) as any[];
+        return webhooks.map(w => mapApiWebhook(w));
+    }
+
+    async editWebhook(options: EditWebhookOptions): Promise<Webhook> {
+        if (this.client) {
+            const webhook = await this.client.fetchWebhook(options.webhookId);
+            const edited = await webhook.edit({
+                name: options.name,
+                avatar: options.avatar,
+                channel: options.channelId,
+                reason: options.reason,
+            });
+            return mapWebhook(edited);
+        }
+        const body: any = {};
+        if (options.name !== undefined) body.name = options.name;
+        if (options.avatar !== undefined) body.avatar = options.avatar;
+        if (options.channelId !== undefined) body.channel_id = options.channelId;
+        const wh = await this.rest.patch(Routes.webhook(options.webhookId), {
+            body,
+            reason: options.reason,
+        });
+        return mapApiWebhook(wh);
+    }
+
+    async deleteWebhook(webhookId: string, reason?: string): Promise<void> {
+        await this.rest.delete(Routes.webhook(webhookId), { reason });
+    }
+
+    async sendWebhookMessage(options: SendWebhookMessageOptions): Promise<DiscordMessage> {
+        const body: any = {};
+        if (options.content) body.content = options.content;
+        if (options.embeds) body.embeds = options.embeds;
+        if (options.username) body.username = options.username;
+        if (options.avatarUrl) body.avatar_url = options.avatarUrl;
+        const msg = await this.rest.post(
+            Routes.webhook(options.webhookId, options.webhookToken),
+            { body, query: new URLSearchParams({ wait: 'true' }) },
+        );
+        return mapApiMessage(msg);
+    }
+
+    async editWebhookMessage(options: EditWebhookMessageOptions): Promise<DiscordMessage> {
+        const body: any = {};
+        if (options.content !== undefined) body.content = options.content;
+        if (options.embeds) body.embeds = options.embeds;
+        const msg = await this.rest.patch(
+            Routes.webhookMessage(options.webhookId, options.webhookToken, options.messageId),
+            { body },
+        );
+        return mapApiMessage(msg);
+    }
+
+    async deleteWebhookMessage(webhookId: string, webhookToken: string, messageId: string): Promise<void> {
+        await this.rest.delete(
+            Routes.webhookMessage(webhookId, webhookToken, messageId),
+        );
+    }
+
+    async fetchWebhookMessage(webhookId: string, webhookToken: string, messageId: string): Promise<DiscordMessage> {
+        const msg = await this.rest.get(
+            Routes.webhookMessage(webhookId, webhookToken, messageId),
+        );
+        return mapApiMessage(msg);
+    }
+
+    // ─── Forums ──────────────────────────────────────────────────
+
+    async getForumChannels(guildId: string): Promise<DiscordChannelSummary[]> {
+        if (this.client) {
+            const guild = await this.resolveGuild(guildId);
+            const channels = await guild.channels.fetch();
+            return channels
+                .filter((c): c is NonNullable<typeof c> => c !== null && c.type === DjsChannelType.GuildForum)
+                .map(c => mapChannelSummary(c));
+        }
+        const channels = (await this.rest.get(Routes.guildChannels(guildId))) as any[];
+        return channels
+            .filter(c => c.type === 15)
+            .map(c => ({
+                id: c.id,
+                name: c.name,
+                type: mapChannelType(c.type),
+                parentId: c.parent_id ?? null,
+                parentName: null,
+                position: c.position ?? 0,
+                topic: c.topic ?? null,
+            }));
+    }
+
+    async createForumPost(options: CreateForumPostOptions): Promise<ForumPost> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(options.channelId);
+            if (!channel || channel.type !== DjsChannelType.GuildForum) {
+                throw new Error(`Channel ${options.channelId} is not a forum channel`);
+            }
+            const forum = channel as ForumChannel;
+            const thread = await forum.threads.create({
+                name: options.name,
+                autoArchiveDuration: options.autoArchiveDuration,
+                message: { content: options.content },
+                appliedTags: options.tagIds,
+            });
+            return mapForumPost(thread);
+        }
+        const body: any = {
+            name: options.name,
+            message: { content: options.content },
+        };
+        if (options.autoArchiveDuration) body.auto_archive_duration = options.autoArchiveDuration;
+        if (options.tagIds) body.applied_tags = options.tagIds;
+        const thread = (await this.rest.post(Routes.threads(options.channelId), { body })) as any;
+        return mapApiForumPost(thread);
+    }
+
+    async getForumPost(postId: string): Promise<ForumPost> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(postId);
+            if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+                throw new Error(`Channel ${postId} is not a thread`);
+            }
+            return mapForumPost(channel as ThreadChannel);
+        }
+        const thread = (await this.rest.get(Routes.channel(postId))) as any;
+        return mapApiForumPost(thread);
+    }
+
+    async listForumThreads(channelId: string, archived?: boolean, limit?: number): Promise<ForumPost[]> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(channelId);
+            if (!channel || channel.type !== DjsChannelType.GuildForum) {
+                throw new Error(`Channel ${channelId} is not a forum channel`);
+            }
+            const forum = channel as ForumChannel;
+            const fetched = archived
+                ? await forum.threads.fetchArchived({ limit })
+                : await forum.threads.fetchActive();
+            const threads = Array.from(fetched.threads.values());
+            const sliced = limit ? threads.slice(0, limit) : threads;
+            return sliced.map(t => mapForumPost(t));
+        }
+        if (archived) {
+            const query = new URLSearchParams();
+            if (limit) query.set('limit', String(limit));
+            const result = (await this.rest.get(
+                `/channels/${channelId}/threads/archived/public`,
+                { query }
+            )) as any;
+            return (result.threads ?? []).map((t: any) => mapApiForumPost(t));
+        }
+        // Active threads are fetched at the guild level. Derive the guild from the channel.
+        const channel = (await this.rest.get(Routes.channel(channelId))) as any;
+        const guildId: string = channel.guild_id;
+        if (!guildId) throw new Error(`Channel ${channelId} has no guild`);
+        const result = (await this.rest.get(Routes.guildActiveThreads(guildId))) as any;
+        const threads = (result.threads ?? []).filter((t: any) => t.parent_id === channelId);
+        const sliced = limit ? threads.slice(0, limit) : threads;
+        return sliced.map((t: any) => mapApiForumPost(t, guildId));
+    }
+
+    async deleteForumPost(postId: string, reason?: string): Promise<void> {
+        await this.rest.delete(Routes.channel(postId), { reason });
+    }
+
+    async getForumTags(channelId: string): Promise<ForumTag[]> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(channelId);
+            if (!channel || channel.type !== DjsChannelType.GuildForum) {
+                throw new Error(`Channel ${channelId} is not a forum channel`);
+            }
+            return (channel as ForumChannel).availableTags.map(t => mapForumTag(t));
+        }
+        const c = (await this.rest.get(Routes.channel(channelId))) as any;
+        return (c.available_tags ?? []).map((t: any) => mapApiForumTag(t));
+    }
+
+    async setForumTags(channelId: string, tags: ForumTagInput[]): Promise<ForumTag[]> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(channelId);
+            if (!channel || channel.type !== DjsChannelType.GuildForum) {
+                throw new Error(`Channel ${channelId} is not a forum channel`);
+            }
+            const forum = channel as ForumChannel;
+            const updated = await forum.setAvailableTags(tags.map(t => ({
+                name: t.name,
+                moderated: t.moderated,
+                emoji: t.emoji ? { id: t.emoji.id ?? null, name: t.emoji.name ?? null } : null,
+            })));
+            return updated.availableTags.map(t => mapForumTag(t));
+        }
+        const body = {
+            available_tags: tags.map(t => ({
+                name: t.name,
+                moderated: t.moderated ?? false,
+                emoji_id: t.emoji?.id ?? null,
+                emoji_name: t.emoji?.name ?? null,
+            })),
+        };
+        const c = (await this.rest.patch(Routes.channel(channelId), { body })) as any;
+        return (c.available_tags ?? []).map((t: any) => mapApiForumTag(t));
+    }
+
+    async updateForumPost(options: UpdateForumPostOptions): Promise<ForumPost> {
+        if (this.client) {
+            const channel = await this.client.channels.fetch(options.postId);
+            if (!channel || !('isThread' in channel) || !(channel as ThreadChannel).isThread()) {
+                throw new Error(`Channel ${options.postId} is not a thread`);
+            }
+            const thread = channel as ThreadChannel;
+            const edited = await thread.edit({
+                name: options.name,
+                archived: options.archived,
+                locked: options.locked,
+                appliedTags: options.appliedTagIds,
+            });
+            return mapForumPost(edited);
+        }
+        const body: any = {};
+        if (options.name !== undefined) body.name = options.name;
+        if (options.archived !== undefined) body.archived = options.archived;
+        if (options.locked !== undefined) body.locked = options.locked;
+        if (options.appliedTagIds !== undefined) body.applied_tags = options.appliedTagIds;
+        const thread = (await this.rest.patch(Routes.channel(options.postId), { body })) as any;
+        return mapApiForumPost(thread);
+    }
+
+    async replyToForum(options: ReplyToForumOptions): Promise<DiscordMessage> {
+        const body: any = {};
+        if (options.content) body.content = options.content;
+        if (options.embeds) body.embeds = options.embeds;
+        const msg = (await this.rest.post(Routes.channelMessages(options.postId), {
+            body,
+        })) as APIMessage;
+        return mapApiMessage(msg);
+    }
+
+    // ─── Invites ─────────────────────────────────────────────────
+
+    async listInvites(guildId: string): Promise<Invite[]> {
+        const invites = (await this.rest.get(Routes.guildInvites(guildId))) as any[];
+        return invites.map(i => mapApiInvite(i));
+    }
+
+    async listChannelInvites(channelId: string): Promise<Invite[]> {
+        const invites = (await this.rest.get(Routes.channelInvites(channelId))) as any[];
+        return invites.map(i => mapApiInvite(i));
+    }
+
+    async getInvite(code: string): Promise<Invite> {
+        const query = new URLSearchParams({ with_counts: 'true' });
+        const invite = (await this.rest.get(Routes.invite(code), { query })) as any;
+        return mapApiInvite(invite);
+    }
+
+    async createInvite(options: CreateInviteOptions): Promise<Invite> {
+        const body: any = {};
+        if (options.maxAge !== undefined) body.max_age = options.maxAge;
+        if (options.maxUses !== undefined) body.max_uses = options.maxUses;
+        if (options.temporary !== undefined) body.temporary = options.temporary;
+        if (options.unique !== undefined) body.unique = options.unique;
+
+        const invite = (await this.rest.post(Routes.channelInvites(options.channelId), { body })) as any;
+        return mapApiInvite(invite);
+    }
+
+    async deleteInvite(code: string, reason?: string): Promise<void> {
+        await this.rest.delete(Routes.invite(code), { reason });
+    }
+
+    // ─── DMs ─────────────────────────────────────────────────────
+
+    async sendDM(options: SendDMOptions): Promise<DiscordMessage> {
+        if (this.client) {
+            const user = await this.client.users.fetch(options.userId);
+            const dm = await user.createDM();
+            const payload: any = {};
+            if (options.content) payload.content = options.content;
+            if (options.embeds) payload.embeds = options.embeds;
+            const msg = await dm.send(payload);
+            return mapMessage(msg);
+        }
+        const dmChannel = (await this.rest.post(Routes.userChannels(), {
+            body: { recipient_id: options.userId },
+        })) as { id: string };
+
+        const body: any = {};
+        if (options.content) body.content = options.content;
+        if (options.embeds) body.embeds = options.embeds;
+
+        const msg = (await this.rest.post(Routes.channelMessages(dmChannel.id), { body })) as APIMessage;
+        return mapApiMessage(msg);
+    }
+
+    // ─── Scheduled Events ────────────────────────────────────────
+
+    async listScheduledEvents(guildId: string): Promise<ScheduledEvent[]> {
+        const events = (await this.rest.get(Routes.guildScheduledEvents(guildId))) as any[];
+        return events.map(e => mapApiScheduledEvent(e));
+    }
+
+    async getScheduledEvent(guildId: string, eventId: string): Promise<ScheduledEvent> {
+        const event = (await this.rest.get(Routes.guildScheduledEvent(guildId, eventId))) as any;
+        return mapApiScheduledEvent(event);
+    }
+
+    async createScheduledEvent(options: CreateScheduledEventOptions): Promise<ScheduledEvent> {
+        if (options.entityType === 'EXTERNAL') {
+            if (!options.location) {
+                throw new Error('create_scheduled_event: location is required when entity_type is external');
+            }
+            if (!options.scheduledEndTime) {
+                throw new Error('create_scheduled_event: scheduled_end_time is required when entity_type is external');
+            }
+        } else {
+            if (!options.channelId) {
+                throw new Error(`create_scheduled_event: channel_id is required when entity_type is ${options.entityType.toLowerCase()}`);
+            }
+        }
+
+        const entityTypeNum = options.entityType === 'STAGE_INSTANCE' ? 1
+            : options.entityType === 'VOICE' ? 2
+            : 3;
+
+        const body: any = {
+            name: options.name,
+            scheduled_start_time: options.scheduledStartTime,
+            privacy_level: 2, // GUILD_ONLY
+            entity_type: entityTypeNum,
+        };
+        if (options.scheduledEndTime) body.scheduled_end_time = options.scheduledEndTime;
+        if (options.description) body.description = options.description;
+        if (options.channelId) body.channel_id = options.channelId;
+        if (options.location) body.entity_metadata = { location: options.location };
+
+        const event = (await this.rest.post(Routes.guildScheduledEvents(options.guildId), { body })) as any;
+        return mapApiScheduledEvent(event);
+    }
+
+    async editScheduledEvent(options: EditScheduledEventOptions): Promise<ScheduledEvent> {
+        const body: any = {};
+        if (options.name !== undefined) body.name = options.name;
+        if (options.scheduledStartTime !== undefined) body.scheduled_start_time = options.scheduledStartTime;
+        if (options.scheduledEndTime !== undefined) body.scheduled_end_time = options.scheduledEndTime;
+        if (options.description !== undefined) body.description = options.description;
+        if (options.channelId !== undefined) body.channel_id = options.channelId;
+        if (options.location !== undefined) body.entity_metadata = { location: options.location };
+        if (options.entityType !== undefined) {
+            body.entity_type = options.entityType === 'STAGE_INSTANCE' ? 1
+                : options.entityType === 'VOICE' ? 2
+                : 3;
+        }
+
+        const event = (await this.rest.patch(Routes.guildScheduledEvent(options.guildId, options.eventId), { body })) as any;
+        return mapApiScheduledEvent(event);
+    }
+
+    async deleteScheduledEvent(guildId: string, eventId: string): Promise<void> {
+        await this.rest.delete(Routes.guildScheduledEvent(guildId, eventId));
+    }
+
+    async getEventSubscribers(guildId: string, eventId: string, limit?: number): Promise<DiscordUser[]> {
+        const query = new URLSearchParams();
+        if (limit !== undefined) query.set('limit', String(limit));
+        const subscribers = (await this.rest.get(Routes.guildScheduledEventUsers(guildId, eventId), {
+            query,
+        })) as any[];
+        return subscribers.map(s => ({
+            id: s.user.id,
+            username: s.user.username,
+            displayName: s.user.global_name ?? s.user.username,
+            avatar: s.user.avatar,
+            bot: s.user.bot ?? false,
+            createdAt: new Date(Number(BigInt(s.user.id) >> 22n) + 1420070400000).toISOString(),
+            banner: s.user.banner ?? null,
+        }));
+    }
+
+    async createEventInvite(_guildId: string, eventId: string, channelId: string): Promise<ScheduledEventInvite> {
+        const invite = (await this.rest.post(Routes.channelInvites(channelId), {
+            body: {},
+        })) as { code: string };
+        return {
+            code: invite.code,
+            url: `https://discord.gg/${invite.code}?event=${eventId}`,
+            eventId,
+        };
+    }
+
+    // ─── Screening ───────────────────────────────────────────────
+
+    async getWelcomeScreen(guildId: string): Promise<WelcomeScreen> {
+        const raw = await this.rest.get(Routes.guildWelcomeScreen(guildId));
+        return mapApiWelcomeScreen(raw);
+    }
+
+    async updateWelcomeScreen(options: UpdateWelcomeScreenOptions): Promise<WelcomeScreen> {
+        const body: any = {};
+        if (options.enabled !== undefined) body.enabled = options.enabled;
+        if (options.description !== undefined) body.description = options.description;
+        if (options.welcomeChannels !== undefined) {
+            body.welcome_channels = options.welcomeChannels.map(wc => ({
+                channel_id: wc.channelId,
+                description: wc.description,
+                emoji_name: wc.emojiName ?? null,
+                emoji_id: wc.emojiId ?? null,
+            }));
+        }
+        const raw = await this.rest.patch(Routes.guildWelcomeScreen(options.guildId), { body });
+        return mapApiWelcomeScreen(raw);
     }
 }
 
