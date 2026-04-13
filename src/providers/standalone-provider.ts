@@ -801,6 +801,9 @@ export class StandaloneProvider implements DiscordProvider {
             const guild = await this.resolveGuild(guildId);
             const role = await guild.roles.fetch(roleId);
             if (!role) throw new Error(`Role ${roleId} not found`);
+            // Fetch all guild members to populate the cache; role.members only
+            // returns currently cached members which may be incomplete on large guilds.
+            await guild.members.fetch();
             return role.members.map(m => mapMember(m));
         }
         const members: any[] = [];
@@ -827,7 +830,13 @@ export class StandaloneProvider implements DiscordProvider {
     }
 
     async setRoleIcon(guildId: string, roleId: string, icon: string): Promise<void> {
-        const body: any = /^https?:\/\//i.test(icon)
+        if (/^https?:\/\//i.test(icon)) {
+            throw new Error(
+                'Plain image URLs are not supported for role icons. ' +
+                'Provide a base64 Data URI (e.g. "data:image/png;base64,...") or a Unicode emoji.',
+            );
+        }
+        const body: any = /^data:/i.test(icon)
             ? { icon }
             : { unicode_emoji: icon };
         await this.rest.patch(Routes.guildRole(guildId, roleId), { body });
@@ -933,8 +942,22 @@ export class StandaloneProvider implements DiscordProvider {
 
     async copyPermissions(sourceChannelId: string, targetChannelId: string): Promise<void> {
         const source = (await this.rest.get(Routes.channel(sourceChannelId))) as any;
-        const overwrites = (source.permission_overwrites ?? []) as any[];
-        for (const o of overwrites) {
+        const sourceOverwrites = (source.permission_overwrites ?? []) as any[];
+        const sourceIds = new Set(sourceOverwrites.map((o: any) => o.id as string));
+
+        // Fetch target channel to find stale overwrites that need removal.
+        const target = (await this.rest.get(Routes.channel(targetChannelId))) as any;
+        const targetOverwrites = (target.permission_overwrites ?? []) as any[];
+
+        // Delete target-only overwrites so the target matches the source exactly.
+        for (const o of targetOverwrites) {
+            if (!sourceIds.has(o.id)) {
+                await this.rest.delete(`/channels/${targetChannelId}/permissions/${o.id}`);
+            }
+        }
+
+        // Upsert source overwrites into the target.
+        for (const o of sourceOverwrites) {
             await this.rest.put(`/channels/${targetChannelId}/permissions/${o.id}`, {
                 body: {
                     type: Number(o.type),

@@ -529,11 +529,11 @@ const roleTools: ToolDefinition[] = [
     },
     {
         name: 'set_role_icon',
-        description: 'Set a role\'s icon to an image URL or a Unicode emoji. Requires the server to have the ROLE_ICONS feature (boost level 2+).',
+        description: 'Set a role\'s icon to a base64 Data URI (e.g. "data:image/png;base64,...") or a Unicode emoji. Requires the server to have the ROLE_ICONS feature (boost level 2+). Plain image URLs are not accepted — download the image and convert it to a Data URI first.',
         schema: z.object({
             guild_id: snowflakeId.describe('The server ID'),
             role_id: snowflakeId.describe('The role to set the icon for'),
-            icon: z.string().describe('Image URL or Unicode emoji'),
+            icon: z.string().describe('Base64 Data URI (data:image/...;base64,...) or Unicode emoji'),
         }),
         handler: async (input, provider) => {
             await provider.setRoleIcon(input.guild_id, input.role_id, input.icon);
@@ -771,7 +771,7 @@ const webhookTools: ToolDefinition[] = [
     },
     {
         name: 'send_webhook_message',
-        description: 'Send a message via a webhook. Supports text content, rich embeds, and overriding the display name and avatar.',
+        description: 'Send a message via a webhook. Supports text content, rich embeds, and overriding the display name and avatar. At least one of content or embeds must be provided.',
         schema: z.object({
             webhook_id: snowflakeId.describe('The webhook ID'),
             webhook_token: z.string().describe('The webhook token'),
@@ -779,6 +779,13 @@ const webhookTools: ToolDefinition[] = [
             embeds: z.array(embedSchema).optional().describe('Rich embed objects'),
             username: z.string().optional().describe('Override the webhook display name'),
             avatar_url: z.string().optional().describe('Override the webhook avatar URL'),
+        }).superRefine((data, ctx) => {
+            if (!data.content && (!data.embeds || data.embeds.length === 0)) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: 'At least one of content or embeds must be provided',
+                });
+            }
         }),
         handler: async (input, provider) => provider.sendWebhookMessage({
             webhookId: input.webhook_id,

@@ -13,23 +13,23 @@ export const snowflakeId = z
 
 /** Embed field schema */
 export const embedFieldSchema = z.object({
-    name: z.string(),
-    value: z.string(),
+    name: z.string().max(256, 'Embed field name must be at most 256 characters'),
+    value: z.string().max(1024, 'Embed field value must be at most 1024 characters'),
     inline: z.boolean().optional(),
 });
 
-/** Rich embed object schema */
+/** Rich embed object schema (limits per Discord API) */
 export const embedSchema = z.object({
-    title: z.string().optional(),
-    description: z.string().optional(),
+    title: z.string().max(256, 'Embed title must be at most 256 characters').optional(),
+    description: z.string().max(4096, 'Embed description must be at most 4096 characters').optional(),
     url: z.string().optional(),
     color: z.number().optional(),
-    fields: z.array(embedFieldSchema).optional(),
-    footer: z.object({ text: z.string(), iconUrl: z.string().optional() }).optional(),
+    fields: z.array(embedFieldSchema).max(25, 'Embeds may contain at most 25 fields').optional(),
+    footer: z.object({ text: z.string().max(2048, 'Footer text must be at most 2048 characters'), iconUrl: z.string().optional() }).optional(),
     thumbnail: z.object({ url: z.string() }).optional(),
     image: z.object({ url: z.string() }).optional(),
     author: z
-        .object({ name: z.string(), url: z.string().optional(), iconUrl: z.string().optional() })
+        .object({ name: z.string().max(256, 'Author name must be at most 256 characters'), url: z.string().optional(), iconUrl: z.string().optional() })
         .optional(),
     timestamp: z.string().optional(),
 });

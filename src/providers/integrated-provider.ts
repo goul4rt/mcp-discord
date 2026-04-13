@@ -490,6 +490,9 @@ export class IntegratedProvider implements DiscordProvider {
         const guild = await this.client.guilds.fetch(guildId);
         const role = await guild.roles.fetch(roleId);
         if (!role) throw new Error(`Role ${roleId} not found`);
+        // Fetch all guild members to populate the cache; role.members only
+        // returns currently cached members which may be incomplete on large guilds.
+        await guild.members.fetch();
         return role.members.map(m => mapMember(m));
     }
 
@@ -504,8 +507,14 @@ export class IntegratedProvider implements DiscordProvider {
         const guild = await this.client.guilds.fetch(guildId);
         const role = await guild.roles.fetch(roleId);
         if (!role) throw new Error(`Role ${roleId} not found`);
-        // Discord API treats unicode emoji via `unicodeEmoji` and image via `icon`.
         if (/^https?:\/\//i.test(icon)) {
+            throw new Error(
+                'Plain image URLs are not supported for role icons. ' +
+                'Provide a base64 Data URI (e.g. "data:image/png;base64,...") or a Unicode emoji.',
+            );
+        }
+        // Discord API treats unicode emoji via `unicodeEmoji` and image via `icon`.
+        if (/^data:/i.test(icon)) {
             await role.edit({ icon });
         } else {
             await role.edit({ unicodeEmoji: icon });
@@ -618,6 +627,22 @@ export class IntegratedProvider implements DiscordProvider {
         const source = await this.client.channels.fetch(sourceChannelId);
         assertGuildChannel(source, sourceChannelId);
         const sourceChannel = source as GuildChannel;
+
+        // Fetch target channel to find stale overwrites that need removal.
+        const target = await this.client.channels.fetch(targetChannelId);
+        assertGuildChannel(target, targetChannelId);
+        const targetChannel = target as GuildChannel;
+
+        const sourceIds = new Set(sourceChannel.permissionOverwrites.cache.keys());
+
+        // Delete target-only overwrites so the target matches the source exactly.
+        for (const overwrite of targetChannel.permissionOverwrites.cache.values()) {
+            if (!sourceIds.has(overwrite.id)) {
+                await this.client.rest.delete(`/channels/${targetChannelId}/permissions/${overwrite.id}`);
+            }
+        }
+
+        // Upsert source overwrites into the target.
         for (const overwrite of sourceChannel.permissionOverwrites.cache.values()) {
             await this.client.rest.put(`/channels/${targetChannelId}/permissions/${overwrite.id}`, {
                 body: {
