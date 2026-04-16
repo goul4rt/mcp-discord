@@ -27,9 +27,9 @@ Give any MCP client (Claude, Cursor, custom agents) full control over Discord �
 
 ---
 
-## Why mcp-discord?
+## Why mcp-discord? {#why-mcp-discord}
 
-- **80+ tools** across 8 categories — servers, channels, messages, reactions, members, roles, moderation, and monitoring
+- **30+ tools** across 8 categories — servers, channels, messages, reactions, members, roles, moderation, and monitoring
 - **Dual-mode** — run standalone (own process) or integrate as a plugin into your existing discord.js bot
 - **REST-only or Gateway** — choose between lightweight REST-only mode or full WebSocket gateway for real-time features
 - **Two transports** — stdio (default, for Claude Desktop / Claude Code) or HTTP with Bearer token auth
@@ -154,7 +154,7 @@ npm run start:http
 Use `IntegratedProvider` to embed mcp-discord into your existing discord.js bot:
 
 ```typescript
-import { IntegratedProvider, createMcpServer } from 'mcp-discord';
+import { IntegratedProvider, createMcpServer } from '@goul4rt/mcp-discord';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 const provider = new IntegratedProvider({ client: myDiscordClient });
@@ -167,7 +167,7 @@ await server.connect(transport);
 
 ---
 
-## Usage Examples
+## Usage Examples {#usage-examples}
 
 ### For Claude/MCP Users
 
@@ -208,7 +208,7 @@ Use these examples as a starting point for your own MCP server or bot integratio
 **Example 1: Send a message**
 
 ```typescript
-import { IntegratedProvider } from 'mcp-discord';
+import { IntegratedProvider } from '@goul4rt/mcp-discord';
 
 const provider = new IntegratedProvider({ client: myBot });
 await provider.connect();
@@ -299,7 +299,7 @@ await provider.addReaction(channelId, messageId, {
 
 ---
 
-## Tools
+## Tools {#tools}
 
 ### Server / Guild (2 tools)
 
@@ -376,7 +376,7 @@ await provider.addReaction(channelId, messageId, {
 
 ---
 
-## Troubleshooting
+## Troubleshooting {#troubleshooting}
 
 ### Discord Token Not Working
 
@@ -434,7 +434,7 @@ await provider.addReaction(channelId, messageId, {
 
 ---
 
-## Architecture
+## Architecture {#architecture}
 
 ```text
 ┌─────────────────────────────────────────────────┐
@@ -449,7 +449,7 @@ await provider.addReaction(channelId, messageId, {
                    │
 ┌──────────────────▼──────────────────────────────┐
 │            Tool Registry                         │
-│         (80+ tools, Zod validation)               │
+│         (30+ tools, Zod validation)               │
 └──────────────────┬──────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────┐
@@ -472,12 +472,12 @@ await provider.addReaction(channelId, messageId, {
 
 ---
 
-## Integration Guide
+## Integration Guide {#integration-guide}
 
 To use mcp-discord as a plugin inside your existing discord.js bot:
 
 ```typescript
-import { IntegratedProvider, createMcpServer } from 'mcp-discord';
+import { IntegratedProvider, createMcpServer } from '@goul4rt/mcp-discord';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 // Your existing discord.js client
@@ -493,7 +493,7 @@ The `IntegratedProvider` uses your bot's existing gateway connection — no extr
 
 ---
 
-## Configuration Reference
+## Configuration Reference {#configuration-reference}
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
