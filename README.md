@@ -37,64 +37,31 @@ Give any MCP client (Claude, Cursor, custom agents) full control over Discord â€
 
 ---
 
-## Quick Start
+## Getting Started: For MCP/Claude Users {#getting-started-mcp}
 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org) 18 or higher
 - A [Discord bot token](https://discord.com/developers/applications)
 
-### Install
+### Installation
+
+Install via npm:
 
 ```bash
-# Clone the repository
-git clone https://github.com/goul4rt/mcp-discord.git
-cd mcp-discord
-
-# Install dependencies
-npm install
-
-# Build
-npm run build
+npm install @goul4rt/mcp-discord
 ```
 
-### Configure
+### Configure Claude Desktop / Claude Code
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your Discord bot token:
-
-```env
-DISCORD_TOKEN=your-bot-token-here
-```
-
-### Run
-
-```bash
-# stdio transport (default â€” for MCP clients like Claude)
-npm start
-
-# HTTP transport (for remote/web clients)
-npm run start:http
-```
-
----
-
-## MCP Client Configuration
-
-### Claude Desktop / Claude Code
-
-Add to your MCP config file:
+Add to your MCP config (usually `~/Library/Application\ Support/Claude/claude_desktop_config.json` on Mac):
 
 ```json
 {
     "mcpServers": {
         "discord": {
             "command": "node",
-            "args": ["dist/standalone.js"],
-            "cwd": "/path/to/mcp-discord",
+            "args": ["-e", "require('@goul4rt/mcp-discord').runStandalone()"],
             "env": {
                 "DISCORD_TOKEN": "your-bot-token-here"
             }
@@ -103,15 +70,24 @@ Add to your MCP config file:
 }
 ```
 
-### With Gateway (real-time features)
+### First Command
+
+Restart Claude, then ask:
+
+> "List all Discord servers I have access to"
+
+Claude will automatically invoke the `list_servers` tool and show you the results.
+
+### With Real-Time Features (Optional)
+
+To enable real-time Discord gateway features (like monitoring new messages as they arrive), add this to your config:
 
 ```json
 {
     "mcpServers": {
         "discord": {
             "command": "node",
-            "args": ["dist/standalone.js"],
-            "cwd": "/path/to/mcp-discord",
+            "args": ["-e", "require('@goul4rt/mcp-discord').runStandalone()"],
             "env": {
                 "DISCORD_TOKEN": "your-bot-token-here",
                 "DISCORD_USE_GATEWAY": "true"
