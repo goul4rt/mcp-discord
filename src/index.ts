@@ -43,3 +43,49 @@ export type { ToolDefinition } from './tools/registry.js';
 
 // Types
 export * from './types/discord.js';
+
+// Standalone runner
+export async function runStandalone(config?: {
+    token?: string;
+    useGateway?: boolean;
+}): Promise<void> {
+    const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
+    const { StandaloneProvider } = await import('./providers/standalone-provider.js');
+    const { createMcpServer } = await import('./server.js');
+
+    // Use provided config or read from environment
+    const token = config?.token ?? process.env.DISCORD_TOKEN ?? '';
+    const useGateway = config?.useGateway ?? (process.env.DISCORD_USE_GATEWAY ?? 'false').toLowerCase() === 'true';
+
+    if (!token) {
+        throw new Error('DISCORD_TOKEN is required. Provide it via config parameter or DISCORD_TOKEN environment variable.');
+    }
+
+    // Create provider
+    const provider = new StandaloneProvider({
+        token,
+        useGateway,
+    });
+
+    console.error(`[discord-mcp] Connecting to Discord (mode: ${useGateway ? 'gateway' : 'REST-only'})...`);
+    await provider.connect();
+    console.error(`[discord-mcp] Connected as bot user ${provider.getBotUserId()}`);
+
+    // Create MCP server
+    const server = createMcpServer({ provider });
+
+    // Start with stdio transport
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error('[discord-mcp] MCP server running on stdio');
+
+    // Graceful shutdown
+    const shutdown = async () => {
+        console.error('[discord-mcp] Shutting down...');
+        await provider.disconnect();
+        process.exit(0);
+    };
+
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+}
