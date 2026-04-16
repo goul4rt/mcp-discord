@@ -15,7 +15,7 @@ Give any MCP client (Claude, Cursor, custom agents) full control over Discord �
 
 ## Why mcp-discord?
 
-- **30+ tools** across 8 categories — servers, channels, messages, reactions, members, roles, moderation, and monitoring
+- **80+ tools** across 8 categories — servers, channels, messages, reactions, members, roles, moderation, and monitoring
 - **Dual-mode** — run standalone (own process) or integrate as a plugin into your existing discord.js bot
 - **REST-only or Gateway** — choose between lightweight REST-only mode or full WebSocket gateway for real-time features
 - **Two transports** — stdio (default, for Claude Desktop / Claude Code) or HTTP with Bearer token auth
@@ -201,7 +201,7 @@ Add to your MCP config file:
                    │
 ┌──────────────────▼──────────────────────────────┐
 │            Tool Registry                         │
-│         (30 tools, Zod validation)               │
+│         (80+ tools, Zod validation)               │
 └──────────────────┬──────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────┐
