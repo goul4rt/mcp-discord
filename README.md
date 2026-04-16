@@ -6,6 +6,8 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org)
 [![GitHub stars](https://img.shields.io/github/stars/goul4rt/mcp-discord.svg?style=social)](https://github.com/goul4rt/mcp-discord)
+[![npm version](https://img.shields.io/npm/v/@goul4rt/mcp-discord)](https://npmjs.com/package/@goul4rt/mcp-discord)
+[![npm downloads](https://img.shields.io/npm/dm/@goul4rt/mcp-discord)](https://npmjs.com/package/@goul4rt/mcp-discord)
 
 Give any MCP client (Claude, Cursor, custom agents) full control over Discord — messages, moderation, channels, roles, and more. Born from production use at [delfus.app](https://delfus.app), open-sourced for the community.
 
