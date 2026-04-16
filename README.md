@@ -167,6 +167,138 @@ await server.connect(transport);
 
 ---
 
+## Usage Examples
+
+### For Claude/MCP Users
+
+Ask Claude naturally — it will automatically invoke the right tool:
+
+**Example 1: Send a message**
+```
+> "Send a message to the #general channel saying 'Hello everyone!'"
+
+Claude invokes: `send_message` with `channelId`, `content`
+```
+
+**Example 2: Search for a member**
+```
+> "Find all members in my server with 'admin' in their username"
+
+Claude invokes: `search_members` with `username` filter
+```
+
+**Example 3: Moderate a user**
+```
+> "Timeout the user @Spam for 24 hours with reason 'Spam'"
+
+Claude invokes: `timeout_user` with userId, duration, reason
+```
+
+**Example 4: View audit log**
+```
+> "Show me the last 10 bans in the server"
+
+Claude invokes: `get_audit_log` with action filter
+```
+
+### For Bot Developers
+
+Use these examples as a starting point for your own MCP server or bot integration:
+
+**Example 1: Send a message**
+
+```typescript
+import { IntegratedProvider } from 'mcp-discord';
+
+const provider = new IntegratedProvider({ client: myBot });
+await provider.connect();
+
+const result = await provider.sendMessage(channelId, {
+    content: 'Hello @members! New announcement:',
+    embeds: [{ title: 'Update', description: 'System online' }]
+});
+```
+
+**Example 2: Search members**
+
+```typescript
+const members = await provider.searchMembers(serverId, {
+    username: 'admin'
+});
+
+console.log(\`Found \${members.length} members matching search\`);
+members.forEach(m => console.log(\`\${m.user.username} - roles: \${m.roles.length}\`));
+```
+
+**Example 3: Moderate a user**
+
+```typescript
+await provider.timeoutUser(serverId, userId, {
+    duration: 24 * 60 * 60 * 1000, // 24 hours in ms
+    reason: 'Spam',
+    moderatorId: botId
+});
+```
+
+**Example 4: Fetch audit log**
+
+```typescript
+const auditLog = await provider.getAuditLog(serverId, {
+    limit: 10,
+    actionType: 'BAN' // Filter by specific action
+});
+
+auditLog.entries.forEach(entry => {
+    console.log(\`\${entry.action}: \${entry.targetId} by \${entry.executorId}\`);
+});
+```
+
+**Example 5: Create a role**
+
+```typescript
+const newRole = await provider.createRole(serverId, {
+    name: 'Muted',
+    color: 0xFF0000, // Red
+    mentionable: false
+});
+
+console.log(\`Created role: \${newRole.name}\`);
+```
+
+**Example 6: Create a thread**
+
+```typescript
+const thread = await provider.createThread(channelId, {
+    name: 'Bug: Login fails on Safari',
+    messageId: originalMessageId,
+    autoArchiveDuration: 1440 // 1 day
+});
+```
+
+**Example 7: List all roles**
+
+```typescript
+const roles = await provider.listRoles(serverId);
+
+roles.forEach(role => {
+    console.log(\`\${role.name} - members: \${role.memberCount}\`);
+});
+```
+
+**Example 8: Add a reaction**
+
+```typescript
+await provider.addReaction(channelId, messageId, {
+    emoji: '👍' // Unicode emoji
+});
+// Or custom emoji:
+await provider.addReaction(channelId, messageId, {
+    emoji: '<:myemoji:123456789>'
+});
+```
+
+---
+
 ## Tools
 
 ### Server / Guild (2 tools)
