@@ -376,6 +376,64 @@ await provider.addReaction(channelId, messageId, {
 
 ---
 
+## Troubleshooting
+
+### Discord Token Not Working
+
+**Symptoms:** "Invalid token" error or 401 Unauthorized from Discord API
+
+**Solution:**
+1. Verify you copied the **token** (not the client secret) from [Discord Developer Portal](https://discord.com/developers/applications)
+2. Ensure the token hasn't been regenerated (regenerating old token invalidates it)
+3. Check `.env` file has exact format: `DISCORD_TOKEN=token-here` (no quotes)
+4. Verify bot has at least one permission configured in Developer Portal → OAuth2 → Scopes
+
+### Can't See Commands in Claude
+
+**Symptoms:** Claude says "I don't have access to Discord tools" or tools don't appear
+
+**Solution:**
+1. Ensure the MCP server is running:
+   - For stdio: `npm start` should show "MCP server listening"
+   - For HTTP: `npm run start:http` should show "HTTP server on port 3100"
+2. Restart Claude/Claude Code app after adding the config
+3. Check config file path:
+   - **Mac:** `~/Library/Application\ Support/Claude/claude_desktop_config.json`
+   - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+   - **Linux:** `~/.config/Claude/claude_desktop_config.json`
+4. Verify `node` command is available in your PATH (type `node --version` in terminal)
+
+### Gateway Connection Timeout (Real-Time Features)
+
+**Symptoms:** When using `DISCORD_USE_GATEWAY=true`, connection hangs or times out
+
+**Solution:**
+1. Check your firewall allows WebSocket connections to Discord:
+   ```bash
+   # Test connectivity to Discord gateway
+   curl -I https://gateway.discord.gg
+   ```
+2. Verify bot has GATEWAY intents enabled in Discord Developer Portal:
+   - Go to Applications → Your Bot → Bot → Privileged Gateway Intents
+   - Enable: Message Content Intent, Server Members Intent
+3. Try without gateway first (`DISCORD_USE_GATEWAY=false`) to isolate the issue
+
+### "Bot Lacks Permissions" for Tool
+
+**Symptoms:** Tool executes but fails with "Missing Permissions: SEND_MESSAGES" (or similar)
+
+**Solution:**
+1. Check role hierarchy: Bot role must be higher than the role/member it's trying to manage
+   - Go to Server Settings → Roles
+   - Ensure @bot role is above target role
+2. Verify the bot's role has required permissions:
+   - Go to Server Settings → Roles → @bot role
+   - Enable the permission in question (e.g., "Send Messages", "Manage Messages")
+3. If permission is channel-specific, check Channel Settings → Permissions
+   - Verify bot role isn't being denied the permission
+
+---
+
 ## Architecture
 
 ```
