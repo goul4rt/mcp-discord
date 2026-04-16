@@ -13,6 +13,18 @@ Give any MCP client (Claude, Cursor, custom agents) full control over Discord â€
 
 **[Portugues (BR)](docs/pt-br/README.md)**
 
+## Table of Contents
+
+- [Why mcp-discord?](#why-mcp-discord)
+- [Getting Started (for MCP/Claude Users)](#getting-started-mcp)
+- [Getting Started (for Bot Developers)](#getting-started-bot)
+- [Usage Examples](#usage-examples)
+- [Tools](#tools)
+- [Troubleshooting](#troubleshooting)
+- [Architecture](#architecture)
+- [Integration Guide](#integration-guide)
+- [Configuration](#configuration-reference)
+
 ---
 
 ## Why mcp-discord?
