@@ -1,5 +1,5 @@
 {
-    "name": "mcp-discord",
+    "name": "@goul4rt/mcp-discord",
     "version": "0.1.0",
     "description": "The most complete open-source MCP server for Discord — 30+ tools, dual-mode: integrated (plugin) or standalone",
     "author": "goul4rt",
