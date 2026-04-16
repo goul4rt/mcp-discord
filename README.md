@@ -174,28 +174,28 @@ await server.connect(transport);
 Ask Claude naturally — it will automatically invoke the right tool:
 
 **Example 1: Send a message**
-```
+```text
 > "Send a message to the #general channel saying 'Hello everyone!'"
 
 Claude invokes: `send_message` with `channelId`, `content`
 ```
 
 **Example 2: Search for a member**
-```
+```text
 > "Find all members in my server with 'admin' in their username"
 
 Claude invokes: `search_members` with `username` filter
 ```
 
 **Example 3: Moderate a user**
-```
+```text
 > "Timeout the user @Spam for 24 hours with reason 'Spam'"
 
 Claude invokes: `timeout_user` with userId, duration, reason
 ```
 
 **Example 4: View audit log**
-```
+```text
 > "Show me the last 10 bans in the server"
 
 Claude invokes: `get_audit_log` with action filter
@@ -436,7 +436,7 @@ await provider.addReaction(channelId, messageId, {
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │                  MCP Client                      │
 │          (Claude, Cursor, custom)                │
