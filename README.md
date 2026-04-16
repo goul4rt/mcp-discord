@@ -99,6 +99,74 @@ To enable real-time Discord gateway features (like monitoring new messages as th
 
 ---
 
+## Getting Started: For Bot Developers {#getting-started-bot}
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org) 18 or higher
+- A [Discord bot token](https://discord.com/developers/applications)
+- Existing discord.js bot (or create one from scratch)
+
+### Clone & Install
+
+```bash
+# Clone the repository
+git clone https://github.com/goul4rt/mcp-discord.git
+cd mcp-discord
+
+# Install dependencies
+npm install
+
+# Build
+npm run build
+```
+
+### Configure
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your Discord bot token:
+
+```env
+DISCORD_TOKEN=your-bot-token-here
+```
+
+### Run Standalone (Separate Process)
+
+Run the MCP server as a separate process (stdio transport):
+
+```bash
+npm start
+```
+
+Or HTTP transport (for remote clients):
+
+```bash
+npm run start:http
+```
+
+### Integrate Into Your Existing Bot
+
+Use `IntegratedProvider` to embed mcp-discord into your existing discord.js bot:
+
+```typescript
+import { IntegratedProvider, createMcpServer } from 'mcp-discord';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+
+const provider = new IntegratedProvider({ client: myDiscordClient });
+await provider.connect();
+
+const server = createMcpServer({ provider });
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+---
+
 ## Tools
 
 ### Server / Guild (2 tools)
