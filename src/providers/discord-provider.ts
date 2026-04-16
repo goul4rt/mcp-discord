@@ -26,6 +26,8 @@ import type { InviteCapability } from './capabilities/invites.js';
 import type { DMCapability } from './capabilities/dms.js';
 import type { ScheduledEventCapability } from './capabilities/scheduledEvents.js';
 import type { ScreeningCapability } from './capabilities/screening.js';
+import type { ActionLogCapability } from './capabilities/action-logs.js';
+import type { AutoRolesCapability } from './capabilities/auto-roles.js';
 
 export interface DiscordProvider extends
     ServerCapability,
@@ -42,7 +44,9 @@ export interface DiscordProvider extends
     InviteCapability,
     DMCapability,
     ScheduledEventCapability,
-    ScreeningCapability {
+    ScreeningCapability,
+    ActionLogCapability,
+    AutoRolesCapability {
     /** Provider identifier for logging/debugging */
     readonly name: string;
 

@@ -13,6 +13,8 @@
 import { z } from 'zod';
 import type { DiscordProvider } from '../providers/discord-provider.js';
 import { snowflakeId, embedSchema, permissionFlags } from './schemas.js';
+import { actionLogTools } from './action-logs.js';
+import { autoRoleTools } from './auto-roles.js';
 
 // ─── Tool Definition Type ───────────────────────────────────────
 
@@ -1254,6 +1256,8 @@ export const allTools: ToolDefinition[] = [
     ...dmTools,
     ...scheduledEventTools,
     ...screeningTools,
+    ...actionLogTools,
+    ...autoRoleTools,
 ];
 
 export const toolsByName = new Map<string, ToolDefinition>(

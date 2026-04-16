@@ -17,6 +17,8 @@ import { makeInviteStubs } from './__test_helpers__/stubs/invites.js';
 import { makeDMStubs } from './__test_helpers__/stubs/dms.js';
 import { makeScheduledEventStubs } from './__test_helpers__/stubs/scheduledEvents.js';
 import { makeScreeningStubs } from './__test_helpers__/stubs/screening.js';
+import { makeActionLogStubs } from './__test_helpers__/stubs/action-logs.js';
+import { makeAutoRoleStubs } from './__test_helpers__/stubs/auto-roles.js';
 
 // ─── Stub provider ──────────────────────────────────────────────
 
@@ -42,6 +44,8 @@ function makeStubProvider(): DiscordProvider {
         ...makeDMStubs(),
         ...makeScheduledEventStubs(),
         ...makeScreeningStubs(),
+        ...makeActionLogStubs(),
+        ...makeAutoRoleStubs(),
     };
 }
 
@@ -77,7 +81,7 @@ describe('snowflake ID schema', () => {
 
 describe('tool registry', () => {
     it('exposes all tools via allTools', () => {
-        expect(allTools).toHaveLength(81);
+        expect(allTools).toHaveLength(95);
     });
 
     it('has a unique name per tool', () => {

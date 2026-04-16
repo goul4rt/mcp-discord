@@ -24,6 +24,8 @@ import type { Client, FetchMessagesOptions, ForumChannel, GuildBasedChannel, Gui
 import { ChannelType as DjsChannelType, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, OverwriteType as DjsOverwriteType, Routes } from 'discord.js';
 
 import type { DiscordProvider, IntegratedProviderConfig } from './discord-provider.js';
+import type { ActionLogConfig } from './capabilities/action-logs.js';
+import type { AutoRolesConfig } from './capabilities/auto-roles.js';
 import type { EditRoleOptions } from './capabilities/roles.js';
 import { assertTextChannel, assertGuildChannel, assertThreadChannel } from '../utils/guards.js';
 import { ProviderDefaults } from './base-provider.js';
@@ -101,9 +103,37 @@ export class IntegratedProvider implements DiscordProvider {
     readonly name = 'integrated';
 
     private client: Client;
+    private actionLogHandlers?: {
+        getConfig: (guildId: string) => Promise<ActionLogConfig>;
+        setEnabled: (guildId: string, enabled: boolean) => Promise<ActionLogConfig>;
+        setMode: (guildId: string, mode: 'single' | 'per-event') => Promise<ActionLogConfig>;
+        setEventChannel: (guildId: string, event: string, channelId: string | null) => Promise<ActionLogConfig>;
+        setEventEnabled: (guildId: string, event: string, enabled: boolean) => Promise<ActionLogConfig>;
+        updateFilters: (guildId: string, options: any) => Promise<ActionLogConfig>;
+    };
+    private autoRoleHandlers?: {
+        getConfig: (guildId: string) => Promise<AutoRolesConfig>;
+        setEnabled: (guildId: string, enabled: boolean) => Promise<AutoRolesConfig>;
+        setMemberRoles: (guildId: string, roleIds: string[]) => Promise<AutoRolesConfig>;
+        setBotRoles: (guildId: string, roleIds: string[]) => Promise<AutoRolesConfig>;
+        addMemberRole: (guildId: string, roleId: string) => Promise<AutoRolesConfig>;
+        addBotRole: (guildId: string, roleId: string) => Promise<AutoRolesConfig>;
+        removeMemberRole: (guildId: string, roleId: string) => Promise<AutoRolesConfig>;
+        removeBotRole: (guildId: string, roleId: string) => Promise<AutoRolesConfig>;
+    };
 
     constructor(config: IntegratedProviderConfig) {
         this.client = config.client as Client;
+    }
+
+    /** Register custom action log handlers (called by the host bot) */
+    registerActionLogHandlers(handlers: typeof this.actionLogHandlers): void {
+        this.actionLogHandlers = handlers;
+    }
+
+    /** Register custom auto-roles handlers (called by the host bot) */
+    registerAutoRoleHandlers(handlers: typeof this.autoRoleHandlers): void {
+        this.autoRoleHandlers = handlers;
     }
 
     async connect(): Promise<void> {
@@ -1012,5 +1042,107 @@ export class IntegratedProvider implements DiscordProvider {
         }
         const raw = await this.client.rest.patch(`/guilds/${options.guildId}/welcome-screen`, { body });
         return mapApiWelcomeScreen(raw);
+    }
+
+    // ─── ACTION LOG CAPABILITY ──────────────────────────────────────
+
+    async getActionLogConfig(guildId: string): Promise<ActionLogConfig> {
+        if (!this.actionLogHandlers?.getConfig) {
+            throw new Error('[MCP] Action log handlers not registered. Call registerActionLogHandlers() first.');
+        }
+        return this.actionLogHandlers.getConfig(guildId);
+    }
+
+    async setActionLogEnabled(guildId: string, enabled: boolean): Promise<ActionLogConfig> {
+        if (!this.actionLogHandlers?.setEnabled) {
+            throw new Error('[MCP] Action log handlers not registered. Call registerActionLogHandlers() first.');
+        }
+        return this.actionLogHandlers.setEnabled(guildId, enabled);
+    }
+
+    async setActionLogMode(guildId: string, mode: 'single' | 'per-event'): Promise<ActionLogConfig> {
+        if (!this.actionLogHandlers?.setMode) {
+            throw new Error('[MCP] Action log handlers not registered. Call registerActionLogHandlers() first.');
+        }
+        return this.actionLogHandlers.setMode(guildId, mode);
+    }
+
+    async setEventLogChannel(guildId: string, event: string, channelId: string | null): Promise<ActionLogConfig> {
+        if (!this.actionLogHandlers?.setEventChannel) {
+            throw new Error('[MCP] Action log handlers not registered. Call registerActionLogHandlers() first.');
+        }
+        return this.actionLogHandlers.setEventChannel(guildId, event, channelId);
+    }
+
+    async setEventLogEnabled(guildId: string, event: string, enabled: boolean): Promise<ActionLogConfig> {
+        if (!this.actionLogHandlers?.setEventEnabled) {
+            throw new Error('[MCP] Action log handlers not registered. Call registerActionLogHandlers() first.');
+        }
+        return this.actionLogHandlers.setEventEnabled(guildId, event, enabled);
+    }
+
+    async updateLogFilters(guildId: string, options: { ignoredChannelIds?: string[]; ignoredRoleIds?: string[]; ignoreBots?: boolean }): Promise<ActionLogConfig> {
+        if (!this.actionLogHandlers?.updateFilters) {
+            throw new Error('[MCP] Action log handlers not registered. Call registerActionLogHandlers() first.');
+        }
+        return this.actionLogHandlers.updateFilters(guildId, options);
+    }
+
+    // ─── AUTO ROLES CAPABILITY ──────────────────────────────────────
+
+    async getAutoRolesConfig(guildId: string): Promise<AutoRolesConfig> {
+        if (!this.autoRoleHandlers?.getConfig) {
+            throw new Error('[MCP] Auto-roles handlers not registered. Call registerAutoRoleHandlers() first.');
+        }
+        return this.autoRoleHandlers.getConfig(guildId);
+    }
+
+    async setAutoRolesEnabled(guildId: string, enabled: boolean): Promise<AutoRolesConfig> {
+        if (!this.autoRoleHandlers?.setEnabled) {
+            throw new Error('[MCP] Auto-roles handlers not registered. Call registerAutoRoleHandlers() first.');
+        }
+        return this.autoRoleHandlers.setEnabled(guildId, enabled);
+    }
+
+    async setMemberRoles(guildId: string, roleIds: string[]): Promise<AutoRolesConfig> {
+        if (!this.autoRoleHandlers?.setMemberRoles) {
+            throw new Error('[MCP] Auto-roles handlers not registered. Call registerAutoRoleHandlers() first.');
+        }
+        return this.autoRoleHandlers.setMemberRoles(guildId, roleIds);
+    }
+
+    async setBotRoles(guildId: string, roleIds: string[]): Promise<AutoRolesConfig> {
+        if (!this.autoRoleHandlers?.setBotRoles) {
+            throw new Error('[MCP] Auto-roles handlers not registered. Call registerAutoRoleHandlers() first.');
+        }
+        return this.autoRoleHandlers.setBotRoles(guildId, roleIds);
+    }
+
+    async addMemberRole(guildId: string, roleId: string): Promise<AutoRolesConfig> {
+        if (!this.autoRoleHandlers?.addMemberRole) {
+            throw new Error('[MCP] Auto-roles handlers not registered. Call registerAutoRoleHandlers() first.');
+        }
+        return this.autoRoleHandlers.addMemberRole(guildId, roleId);
+    }
+
+    async addBotRole(guildId: string, roleId: string): Promise<AutoRolesConfig> {
+        if (!this.autoRoleHandlers?.addBotRole) {
+            throw new Error('[MCP] Auto-roles handlers not registered. Call registerAutoRoleHandlers() first.');
+        }
+        return this.autoRoleHandlers.addBotRole(guildId, roleId);
+    }
+
+    async removeMemberRole(guildId: string, roleId: string): Promise<AutoRolesConfig> {
+        if (!this.autoRoleHandlers?.removeMemberRole) {
+            throw new Error('[MCP] Auto-roles handlers not registered. Call registerAutoRoleHandlers() first.');
+        }
+        return this.autoRoleHandlers.removeMemberRole(guildId, roleId);
+    }
+
+    async removeBotRole(guildId: string, roleId: string): Promise<AutoRolesConfig> {
+        if (!this.autoRoleHandlers?.removeBotRole) {
+            throw new Error('[MCP] Auto-roles handlers not registered. Call registerAutoRoleHandlers() first.');
+        }
+        return this.autoRoleHandlers.removeBotRole(guildId, roleId);
     }
 }
