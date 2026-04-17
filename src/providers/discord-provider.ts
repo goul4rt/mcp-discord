@@ -28,6 +28,7 @@ import type { ScheduledEventCapability } from './capabilities/scheduledEvents.js
 import type { ScreeningCapability } from './capabilities/screening.js';
 import type { ActionLogCapability } from './capabilities/action-logs.js';
 import type { AutoRolesCapability } from './capabilities/auto-roles.js';
+import type { ReactionRolesCapability } from './capabilities/reaction-roles.js';
 
 export interface DiscordProvider extends
     ServerCapability,
@@ -46,7 +47,8 @@ export interface DiscordProvider extends
     ScheduledEventCapability,
     ScreeningCapability,
     ActionLogCapability,
-    AutoRolesCapability {
+    AutoRolesCapability,
+    ReactionRolesCapability {
     /** Provider identifier for logging/debugging */
     readonly name: string;
 

@@ -19,6 +19,7 @@ import { makeScheduledEventStubs } from './__test_helpers__/stubs/scheduledEvent
 import { makeScreeningStubs } from './__test_helpers__/stubs/screening.js';
 import { makeActionLogStubs } from './__test_helpers__/stubs/action-logs.js';
 import { makeAutoRoleStubs } from './__test_helpers__/stubs/auto-roles.js';
+import { makeReactionRoleStubs } from './__test_helpers__/stubs/reaction-roles.js';
 
 // ─── Stub provider ──────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ function makeStubProvider(): DiscordProvider {
         ...makeScreeningStubs(),
         ...makeActionLogStubs(),
         ...makeAutoRoleStubs(),
+        ...makeReactionRoleStubs(),
     };
 }
 
@@ -81,12 +83,48 @@ describe('snowflake ID schema', () => {
 
 describe('tool registry', () => {
     it('exposes all tools via allTools', () => {
-        expect(allTools).toHaveLength(95);
+        expect(allTools).toHaveLength(104);
     });
 
     it('has a unique name per tool', () => {
         const names = allTools.map(t => t.name);
         expect(new Set(names).size).toBe(names.length);
+    });
+
+    it('assigns a category to every tool', () => {
+        for (const t of allTools) {
+            expect(t.category, `tool ${t.name} is missing category`).toBeDefined();
+        }
+    });
+
+    it('marks well-known destructive tools as destructive', () => {
+        const destructiveExamples = [
+            'delete_channel',
+            'delete_role',
+            'delete_message',
+            'delete_messages_bulk',
+            'ban_user',
+            'kick_user',
+            'bulk_ban',
+            'prune_members',
+            'timeout_user',
+            'reset_channel_permissions',
+        ];
+        for (const name of destructiveExamples) {
+            const tool = toolsByName.get(name);
+            expect(tool, `tool ${name} must exist`).toBeDefined();
+            expect(tool!.isDestructive, `tool ${name} must be marked destructive`).toBe(true);
+            expect(tool!.requiresConfirmation).toBe(true);
+        }
+    });
+
+    it('does not mark read-only tools as destructive', () => {
+        const readOnly = ['list_servers', 'get_server_info', 'get_channels', 'list_roles', 'list_members'];
+        for (const name of readOnly) {
+            const tool = toolsByName.get(name);
+            expect(tool, `tool ${name} must exist`).toBeDefined();
+            expect(tool!.isDestructive ?? false).toBe(false);
+        }
     });
 });
 

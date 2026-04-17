@@ -26,6 +26,7 @@ import { ChannelType as DjsChannelType, GuildScheduledEventEntityType, GuildSche
 import type { DiscordProvider, IntegratedProviderConfig } from './discord-provider.js';
 import type { ActionLogConfig } from './capabilities/action-logs.js';
 import type { AutoRolesConfig } from './capabilities/auto-roles.js';
+import type { ReactionRolesConfig, ReactionRolePanel } from './capabilities/reaction-roles.js';
 import type { EditRoleOptions } from './capabilities/roles.js';
 import { assertTextChannel, assertGuildChannel, assertThreadChannel } from '../utils/guards.js';
 import { ProviderDefaults } from './base-provider.js';
@@ -121,6 +122,16 @@ export class IntegratedProvider implements DiscordProvider {
         removeMemberRole: (guildId: string, roleId: string) => Promise<AutoRolesConfig>;
         removeBotRole: (guildId: string, roleId: string) => Promise<AutoRolesConfig>;
     };
+    private reactionRoleHandlers?: {
+        getConfig: (guildId: string) => Promise<ReactionRolesConfig>;
+        setEnabled: (guildId: string, enabled: boolean) => Promise<ReactionRolesConfig>;
+        createPanel: (guildId: string, input: any) => Promise<ReactionRolePanel>;
+        updatePanel: (guildId: string, panelId: string, updates: any) => Promise<ReactionRolePanel>;
+        deletePanel: (guildId: string, panelId: string) => Promise<void>;
+        deployPanel: (guildId: string, panelId: string) => Promise<{ messageId: string }>;
+        addButton: (guildId: string, panelId: string, button: any) => Promise<ReactionRolePanel>;
+        removeButton: (guildId: string, panelId: string, buttonId: string) => Promise<ReactionRolePanel>;
+    };
 
     constructor(config: IntegratedProviderConfig) {
         this.client = config.client as Client;
@@ -134,6 +145,11 @@ export class IntegratedProvider implements DiscordProvider {
     /** Register custom auto-roles handlers (called by the host bot) */
     registerAutoRoleHandlers(handlers: typeof this.autoRoleHandlers): void {
         this.autoRoleHandlers = handlers;
+    }
+
+    /** Register custom reaction-role handlers (called by the host bot) */
+    registerReactionRoleHandlers(handlers: typeof this.reactionRoleHandlers): void {
+        this.reactionRoleHandlers = handlers;
     }
 
     async connect(): Promise<void> {
@@ -299,6 +315,13 @@ export class IntegratedProvider implements DiscordProvider {
             items: mapped,
             hasMore: mapped.length === (options.limit ?? 50),
         };
+    }
+
+    async getMessage(channelId: string, messageId: string): Promise<DiscordMessage> {
+        const channel = await this.client.channels.fetch(channelId);
+        assertTextChannel(channel, channelId);
+        const message = await (channel as TextChannel).messages.fetch(messageId);
+        return mapMessage(message);
     }
 
     async editMessage(channelId: string, messageId: string, content: string, embeds?: DiscordEmbed[]): Promise<DiscordMessage> {
@@ -1144,5 +1167,63 @@ export class IntegratedProvider implements DiscordProvider {
             throw new Error('[MCP] Auto-roles handlers not registered. Call registerAutoRoleHandlers() first.');
         }
         return this.autoRoleHandlers.removeBotRole(guildId, roleId);
+    }
+
+    // ─── REACTION ROLES CAPABILITY ──────────────────────────────────
+
+    async getReactionRolesConfig(guildId: string): Promise<ReactionRolesConfig> {
+        if (!this.reactionRoleHandlers?.getConfig) {
+            throw new Error('[MCP] Reaction-roles handlers not registered. Call registerReactionRoleHandlers() first.');
+        }
+        return this.reactionRoleHandlers.getConfig(guildId);
+    }
+
+    async setReactionRolesEnabled(guildId: string, enabled: boolean): Promise<ReactionRolesConfig> {
+        if (!this.reactionRoleHandlers?.setEnabled) {
+            throw new Error('[MCP] Reaction-roles handlers not registered. Call registerReactionRoleHandlers() first.');
+        }
+        return this.reactionRoleHandlers.setEnabled(guildId, enabled);
+    }
+
+    async createReactionRolePanel(guildId: string, input: any): Promise<ReactionRolePanel> {
+        if (!this.reactionRoleHandlers?.createPanel) {
+            throw new Error('[MCP] Reaction-roles handlers not registered. Call registerReactionRoleHandlers() first.');
+        }
+        return this.reactionRoleHandlers.createPanel(guildId, input);
+    }
+
+    async updateReactionRolePanel(guildId: string, panelId: string, updates: any): Promise<ReactionRolePanel> {
+        if (!this.reactionRoleHandlers?.updatePanel) {
+            throw new Error('[MCP] Reaction-roles handlers not registered. Call registerReactionRoleHandlers() first.');
+        }
+        return this.reactionRoleHandlers.updatePanel(guildId, panelId, updates);
+    }
+
+    async deleteReactionRolePanel(guildId: string, panelId: string): Promise<void> {
+        if (!this.reactionRoleHandlers?.deletePanel) {
+            throw new Error('[MCP] Reaction-roles handlers not registered. Call registerReactionRoleHandlers() first.');
+        }
+        return this.reactionRoleHandlers.deletePanel(guildId, panelId);
+    }
+
+    async deployReactionRolePanel(guildId: string, panelId: string): Promise<{ messageId: string }> {
+        if (!this.reactionRoleHandlers?.deployPanel) {
+            throw new Error('[MCP] Reaction-roles handlers not registered. Call registerReactionRoleHandlers() first.');
+        }
+        return this.reactionRoleHandlers.deployPanel(guildId, panelId);
+    }
+
+    async addPanelButton(guildId: string, panelId: string, button: any): Promise<ReactionRolePanel> {
+        if (!this.reactionRoleHandlers?.addButton) {
+            throw new Error('[MCP] Reaction-roles handlers not registered. Call registerReactionRoleHandlers() first.');
+        }
+        return this.reactionRoleHandlers.addButton(guildId, panelId, button);
+    }
+
+    async removePanelButton(guildId: string, panelId: string, buttonId: string): Promise<ReactionRolePanel> {
+        if (!this.reactionRoleHandlers?.removeButton) {
+            throw new Error('[MCP] Reaction-roles handlers not registered. Call registerReactionRoleHandlers() first.');
+        }
+        return this.reactionRoleHandlers.removeButton(guildId, panelId, buttonId);
     }
 }

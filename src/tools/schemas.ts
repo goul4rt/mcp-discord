@@ -49,8 +49,11 @@ export const imageUrl = z
 /**
  * Discord permission flag names. The Discord permission bitfield is a 64-bit
  * integer; tools accept the named flags and the provider serializes them.
+ *
+ * Canonical form is SCREAMING_SNAKE_CASE (e.g. VIEW_CHANNEL), but PascalCase
+ * (e.g. ViewChannel) from discord.js is also accepted — the mapper normalizes.
  */
-export const permissionFlag = z.enum([
+const SCREAMING_SNAKE_PERMISSIONS = [
     'CREATE_INSTANT_INVITE',
     'KICK_MEMBERS',
     'BAN_MEMBERS',
@@ -103,6 +106,28 @@ export const permissionFlag = z.enum([
     'USE_EXTERNAL_APPS',
     'PIN_MESSAGES',
     'BYPASS_SLOWMODE',
+] as const;
+
+/** Convert a SCREAMING_SNAKE_CASE permission into its PascalCase equivalent. */
+function screamingSnakeToPascal(name: string): string {
+    return name
+        .toLowerCase()
+        .split('_')
+        .map(part => (part.length > 0 ? part[0].toUpperCase() + part.slice(1) : part))
+        .join('');
+}
+
+const PASCAL_PERMISSIONS = SCREAMING_SNAKE_PERMISSIONS.map(screamingSnakeToPascal);
+const VALID_PERMISSION_SET = new Set<string>([
+    ...SCREAMING_SNAKE_PERMISSIONS,
+    ...PASCAL_PERMISSIONS,
 ]);
+
+export const permissionFlag = z
+    .string()
+    .refine(v => VALID_PERMISSION_SET.has(v), {
+        message:
+            'Must be a valid Discord permission flag (SCREAMING_SNAKE_CASE like VIEW_CHANNEL or PascalCase like ViewChannel)',
+    });
 
 export const permissionFlags = z.array(permissionFlag);

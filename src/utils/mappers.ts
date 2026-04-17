@@ -424,10 +424,53 @@ const BIT_TO_PERMISSION_NAME: Array<{ bit: bigint; name: string }> = Object.entr
     PERMISSION_NAME_TO_BIT,
 ).map(([name, bit]) => ({ bit, name }));
 
+// PascalCase lookup built directly from discord.js PermissionFlagsBits so
+// callers that send names like "ViewChannel" / "SendMessages" also resolve.
+const PERMISSION_PASCAL_TO_BIT: Record<string, bigint> = Object.fromEntries(
+    Object.entries(PermissionFlagsBits).map(([name, bit]) => [name, bit as bigint]),
+);
+
+/** Generate alternative capitalizations for a permission name. */
+function normalizePermName(name: string): string[] {
+    const candidates = new Set<string>();
+    candidates.add(name);
+    // PascalCase → SCREAMING_SNAKE_CASE (ViewChannel → VIEW_CHANNEL)
+    candidates.add(name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase());
+    // kebab-case / camelCase → SCREAMING_SNAKE_CASE
+    candidates.add(
+        name
+            .replace(/-/g, '_')
+            .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+            .toUpperCase(),
+    );
+    // SCREAMING_SNAKE_CASE → PascalCase (VIEW_CHANNEL → ViewChannel)
+    candidates.add(
+        name
+            .toLowerCase()
+            .split('_')
+            .map(part => (part.length > 0 ? part[0].toUpperCase() + part.slice(1) : part))
+            .join(''),
+    );
+    return [...candidates];
+}
+
 export function permissionNamesToBitfield(names: string[]): string {
     let bits = 0n;
     for (const name of names) {
-        const bit = PERMISSION_NAME_TO_BIT[name];
+        let bit: bigint | undefined;
+        // 1. direct SCREAMING_SNAKE_CASE lookup
+        bit = PERMISSION_NAME_TO_BIT[name];
+        // 2. direct PascalCase lookup via discord.js
+        if (bit === undefined) {
+            bit = PERMISSION_PASCAL_TO_BIT[name];
+        }
+        // 3. try normalized variants (handles kebab-case, camelCase, etc.)
+        if (bit === undefined) {
+            for (const candidate of normalizePermName(name)) {
+                bit = PERMISSION_NAME_TO_BIT[candidate] ?? PERMISSION_PASCAL_TO_BIT[candidate];
+                if (bit !== undefined) break;
+            }
+        }
         if (bit === undefined) {
             throw new Error(`Unknown permission flag: ${name}`);
         }

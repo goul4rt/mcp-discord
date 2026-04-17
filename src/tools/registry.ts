@@ -15,14 +15,80 @@ import type { DiscordProvider } from '../providers/discord-provider.js';
 import { snowflakeId, embedSchema, permissionFlags } from './schemas.js';
 import { actionLogTools } from './action-logs.js';
 import { autoRoleTools } from './auto-roles.js';
+import { reactionRoleTools } from './reaction-roles.js';
 
 // ─── Tool Definition Type ───────────────────────────────────────
+
+export type ToolCategory =
+    | 'servers'
+    | 'channels'
+    | 'roles'
+    | 'members'
+    | 'moderation'
+    | 'messages'
+    | 'reactions'
+    | 'permissions'
+    | 'webhooks'
+    | 'forums'
+    | 'invites'
+    | 'dms'
+    | 'events'
+    | 'screening'
+    | 'monitoring'
+    | 'action-logs'
+    | 'auto-roles'
+    | 'reaction-roles'
+    | 'other';
 
 export interface ToolDefinition {
     name: string;
     description: string;
     schema: z.ZodType<any>;
     handler: (input: any, provider: DiscordProvider) => Promise<any>;
+    /** True when the tool performs an action that cannot be trivially undone (delete/ban/kick/prune). */
+    isDestructive?: boolean;
+    /** Hint that clients SHOULD ask the user to confirm before executing. */
+    requiresConfirmation?: boolean;
+    /** Logical grouping used by policy engines and UI categorization. */
+    category?: ToolCategory;
+}
+
+/** Names of tools considered destructive — source of truth for metadata tagging. */
+const DESTRUCTIVE_TOOL_NAMES = new Set<string>([
+    'delete_channel',
+    'delete_role',
+    'delete_message',
+    'delete_messages_bulk',
+    'delete_webhook',
+    'delete_webhook_message',
+    'delete_forum_post',
+    'delete_scheduled_event',
+    'delete_invite',
+    'ban_user',
+    'kick_user',
+    'bulk_ban',
+    'prune_members',
+    'timeout_user',
+    'reset_channel_permissions',
+    'archive_thread',
+]);
+
+/**
+ * Applies `isDestructive`, `requiresConfirmation`, and `category` metadata to every tool.
+ * Called once when the flat allTools array is assembled below. Individual tools declared
+ * inline do not need to repeat this metadata.
+ */
+function applyMetadata(
+    tools: ToolDefinition[],
+    category: ToolCategory
+): ToolDefinition[] {
+    return tools.map(t => ({
+        ...t,
+        category: t.category ?? category,
+        isDestructive: t.isDestructive ?? DESTRUCTIVE_TOOL_NAMES.has(t.name),
+        requiresConfirmation:
+            t.requiresConfirmation ?? DESTRUCTIVE_TOOL_NAMES.has(t.name),
+    }));
 }
 
 // ═════════════════════════════════════════════════════════════════
@@ -192,6 +258,33 @@ const messageTools: ToolDefinition[] = [
             after: input.after,
             around: input.around,
         }),
+    },
+    {
+        name: 'get_message',
+        description: 'Fetch a specific message by ID with optional previous messages for context. Useful for reading the original message when replying to a conversation.',
+        schema: z.object({
+            channel_id: snowflakeId.describe('The channel containing the message'),
+            message_id: snowflakeId.describe('The message ID to fetch'),
+            context_messages: z.number().min(0).max(100).default(3).describe('Number of previous messages to include for context (0-100, default 3)'),
+        }),
+        handler: async (input, provider) => {
+            const message = await provider.getMessage(input.channel_id, input.message_id);
+
+            if (input.context_messages === 0) {
+                return { message, context: [] };
+            }
+
+            const contextResult = await provider.readMessages({
+                channelId: input.channel_id,
+                before: input.message_id,
+                limit: input.context_messages,
+            });
+
+            return {
+                message,
+                context: contextResult.items.reverse(),
+            };
+        },
     },
     {
         name: 'search_messages',
@@ -1241,23 +1334,24 @@ const screeningTools: ToolDefinition[] = [
 // ═════════════════════════════════════════════════════════════════
 
 export const allTools: ToolDefinition[] = [
-    ...serverTools,
-    ...channelTools,
-    ...messageTools,
-    ...reactionTools,
-    ...memberTools,
-    ...roleTools,
-    ...moderationTools,
-    ...monitoringTools,
-    ...permissionTools,
-    ...webhookTools,
-    ...forumTools,
-    ...inviteTools,
-    ...dmTools,
-    ...scheduledEventTools,
-    ...screeningTools,
-    ...actionLogTools,
-    ...autoRoleTools,
+    ...applyMetadata(serverTools, 'servers'),
+    ...applyMetadata(channelTools, 'channels'),
+    ...applyMetadata(messageTools, 'messages'),
+    ...applyMetadata(reactionTools, 'reactions'),
+    ...applyMetadata(memberTools, 'members'),
+    ...applyMetadata(roleTools, 'roles'),
+    ...applyMetadata(moderationTools, 'moderation'),
+    ...applyMetadata(monitoringTools, 'monitoring'),
+    ...applyMetadata(permissionTools, 'permissions'),
+    ...applyMetadata(webhookTools, 'webhooks'),
+    ...applyMetadata(forumTools, 'forums'),
+    ...applyMetadata(inviteTools, 'invites'),
+    ...applyMetadata(dmTools, 'dms'),
+    ...applyMetadata(scheduledEventTools, 'events'),
+    ...applyMetadata(screeningTools, 'screening'),
+    ...applyMetadata(actionLogTools, 'action-logs'),
+    ...applyMetadata(autoRoleTools, 'auto-roles'),
+    ...applyMetadata(reactionRoleTools, 'reaction-roles'),
 ];
 
 export const toolsByName = new Map<string, ToolDefinition>(

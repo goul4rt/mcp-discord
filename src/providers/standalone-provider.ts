@@ -479,6 +479,11 @@ export class StandaloneProvider implements DiscordProvider {
         };
     }
 
+    async getMessage(channelId: string, messageId: string): Promise<DiscordMessage> {
+        const msg = (await this.rest.get(Routes.channelMessage(channelId, messageId))) as APIMessage;
+        return mapApiMessage(msg);
+    }
+
     async editMessage(channelId: string, messageId: string, content: string, embeds?: DiscordEmbed[]): Promise<DiscordMessage> {
         const body: any = { content };
         if (embeds) body.embeds = embeds;
@@ -1490,6 +1495,40 @@ export class StandaloneProvider implements DiscordProvider {
 
     async removeBotRole(_guildId: string, _roleId: string): Promise<AutoRolesConfig> {
         throw new Error('[MCP] Auto-roles are only available in IntegratedProvider mode.');
+    }
+
+    // ─── REACTION ROLES CAPABILITY (STUB) ────────────────────────────
+
+    async getReactionRolesConfig(_guildId: string): Promise<any> {
+        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
+    }
+
+    async setReactionRolesEnabled(_guildId: string, _enabled: boolean): Promise<any> {
+        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
+    }
+
+    async createReactionRolePanel(_guildId: string, _input: any): Promise<any> {
+        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
+    }
+
+    async updateReactionRolePanel(_guildId: string, _panelId: string, _updates: any): Promise<any> {
+        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
+    }
+
+    async deleteReactionRolePanel(_guildId: string, _panelId: string): Promise<void> {
+        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
+    }
+
+    async deployReactionRolePanel(_guildId: string, _panelId: string): Promise<any> {
+        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
+    }
+
+    async addPanelButton(_guildId: string, _panelId: string, _button: any): Promise<any> {
+        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
+    }
+
+    async removePanelButton(_guildId: string, _panelId: string, _buttonId: string): Promise<any> {
+        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
     }
 }
 

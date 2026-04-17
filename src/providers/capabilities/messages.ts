@@ -10,6 +10,7 @@ import type {
 export interface MessageCapability {
     sendMessage(options: SendMessageOptions): Promise<DiscordMessage>;
     readMessages(options: ReadMessagesOptions): Promise<PaginatedResult<DiscordMessage>>;
+    getMessage(channelId: string, messageId: string): Promise<DiscordMessage>;
     editMessage(channelId: string, messageId: string, content: string, embeds?: DiscordEmbed[]): Promise<DiscordMessage>;
     deleteMessage(channelId: string, messageId: string, reason?: string): Promise<void>;
     deleteMessagesBulk(channelId: string, messageIds: string[], reason?: string): Promise<number>;
