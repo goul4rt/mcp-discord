@@ -77,8 +77,19 @@ export const reactionRoleTools: ToolDefinition[] = [
                         label: z.string().max(80).describe('Button label'),
                         role_id: snowflakeId.describe('Role ID to assign when button is clicked'),
                         style: z
-                            .enum(['primary', 'secondary', 'success', 'danger'])
-                            .describe('Button visual style'),
+                            .string()
+                            .transform(s => {
+                                const normalized = s.toLowerCase().trim();
+                                const aliasMap: Record<string, string> = {
+                                    primary: 'primary', blue: 'primary', blurple: 'primary', info: 'primary',
+                                    secondary: 'secondary', grey: 'secondary', gray: 'secondary', default: 'secondary', neutral: 'secondary',
+                                    success: 'success', green: 'success', positive: 'success',
+                                    danger: 'danger', red: 'danger', warning: 'danger', negative: 'danger', destructive: 'danger',
+                                };
+                                return aliasMap[normalized] ?? normalized;
+                            })
+                            .pipe(z.enum(['primary', 'secondary', 'success', 'danger']))
+                            .describe('Button visual style: primary (blue), secondary (grey), success (green), danger (red). Accepts aliases: blue/blurple/info, grey/gray/default, green/positive, red/warning/negative.'),
                         emoji: z.string().optional().describe('Button emoji'),
                     })
                 )
