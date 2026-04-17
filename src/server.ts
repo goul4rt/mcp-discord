@@ -7,7 +7,7 @@
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { allTools, toolsByName } from './tools/registry.js';
+import { allTools, type ToolDefinition } from './tools/registry.js';
 import type { DiscordProvider } from './providers/discord-provider.js';
 import { z } from 'zod';
 
@@ -17,6 +17,12 @@ export interface CreateServerOptions {
     name?: string;
     /** Server version */
     version?: string;
+    /**
+     * Additional tools to register on top of the built-in set. Host applications
+     * can use this to expose host-specific capabilities (database-backed features,
+     * bot-owned state, etc.) through the same MCP surface.
+     */
+    extraTools?: ToolDefinition[];
 }
 
 /**
@@ -46,15 +52,17 @@ function extractZodShape(schema: z.ZodType<any>): Record<string, any> {
 }
 
 export function createMcpServer(options: CreateServerOptions): McpServer {
-    const { provider, name = 'discord-mcp-server', version = '0.1.0' } = options;
+    const { provider, name = 'discord-mcp-server', version = '0.1.0', extraTools = [] } = options;
 
     const server = new McpServer({
         name,
         version,
     });
 
-    // Register every tool from the registry
-    for (const tool of allTools) {
+    const combinedTools: ToolDefinition[] = [...allTools, ...extraTools];
+
+    // Register every tool from the registry plus any host-provided extensions
+    for (const tool of combinedTools) {
         server.tool(
             tool.name,
             tool.description,

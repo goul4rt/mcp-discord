@@ -42,8 +42,6 @@ function permissionFlagsToBitfield(flags: string[]): string {
 }
 
 import type { DiscordProvider, StandaloneProviderConfig } from './discord-provider.js';
-import type { ActionLogConfig } from './capabilities/action-logs.js';
-import type { AutoRolesConfig } from './capabilities/auto-roles.js';
 import type { EditRoleOptions } from './capabilities/roles.js';
 import { ProviderDefaults } from './base-provider.js';
 import type {
@@ -1435,100 +1433,6 @@ export class StandaloneProvider implements DiscordProvider {
         }
         const raw = await this.rest.patch(Routes.guildWelcomeScreen(options.guildId), { body });
         return mapApiWelcomeScreen(raw);
-    }
-
-    // ─── Action Logs (not supported in standalone mode) ─────────────
-
-    async getActionLogConfig(_guildId: string): Promise<ActionLogConfig> {
-        throw new Error('[MCP] Action logs are only available in IntegratedProvider mode.');
-    }
-
-    async setActionLogEnabled(_guildId: string, _enabled: boolean): Promise<ActionLogConfig> {
-        throw new Error('[MCP] Action logs are only available in IntegratedProvider mode.');
-    }
-
-    async setActionLogMode(_guildId: string, _mode: 'single' | 'per-event'): Promise<ActionLogConfig> {
-        throw new Error('[MCP] Action logs are only available in IntegratedProvider mode.');
-    }
-
-    async setEventLogChannel(_guildId: string, _event: string, _channelId: string | null): Promise<ActionLogConfig> {
-        throw new Error('[MCP] Action logs are only available in IntegratedProvider mode.');
-    }
-
-    async setEventLogEnabled(_guildId: string, _event: string, _enabled: boolean): Promise<ActionLogConfig> {
-        throw new Error('[MCP] Action logs are only available in IntegratedProvider mode.');
-    }
-
-    async updateLogFilters(_guildId: string, _options: any): Promise<ActionLogConfig> {
-        throw new Error('[MCP] Action logs are only available in IntegratedProvider mode.');
-    }
-
-    // ─── Auto Roles (not supported in standalone mode) ────────────
-
-    async getAutoRolesConfig(_guildId: string): Promise<AutoRolesConfig> {
-        throw new Error('[MCP] Auto-roles are only available in IntegratedProvider mode.');
-    }
-
-    async setAutoRolesEnabled(_guildId: string, _enabled: boolean): Promise<AutoRolesConfig> {
-        throw new Error('[MCP] Auto-roles are only available in IntegratedProvider mode.');
-    }
-
-    async setMemberRoles(_guildId: string, _roleIds: string[]): Promise<AutoRolesConfig> {
-        throw new Error('[MCP] Auto-roles are only available in IntegratedProvider mode.');
-    }
-
-    async setBotRoles(_guildId: string, _roleIds: string[]): Promise<AutoRolesConfig> {
-        throw new Error('[MCP] Auto-roles are only available in IntegratedProvider mode.');
-    }
-
-    async addMemberRole(_guildId: string, _roleId: string): Promise<AutoRolesConfig> {
-        throw new Error('[MCP] Auto-roles are only available in IntegratedProvider mode.');
-    }
-
-    async addBotRole(_guildId: string, _roleId: string): Promise<AutoRolesConfig> {
-        throw new Error('[MCP] Auto-roles are only available in IntegratedProvider mode.');
-    }
-
-    async removeMemberRole(_guildId: string, _roleId: string): Promise<AutoRolesConfig> {
-        throw new Error('[MCP] Auto-roles are only available in IntegratedProvider mode.');
-    }
-
-    async removeBotRole(_guildId: string, _roleId: string): Promise<AutoRolesConfig> {
-        throw new Error('[MCP] Auto-roles are only available in IntegratedProvider mode.');
-    }
-
-    // ─── REACTION ROLES CAPABILITY (STUB) ────────────────────────────
-
-    async getReactionRolesConfig(_guildId: string): Promise<any> {
-        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
-    }
-
-    async setReactionRolesEnabled(_guildId: string, _enabled: boolean): Promise<any> {
-        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
-    }
-
-    async createReactionRolePanel(_guildId: string, _input: any): Promise<any> {
-        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
-    }
-
-    async updateReactionRolePanel(_guildId: string, _panelId: string, _updates: any): Promise<any> {
-        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
-    }
-
-    async deleteReactionRolePanel(_guildId: string, _panelId: string): Promise<void> {
-        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
-    }
-
-    async deployReactionRolePanel(_guildId: string, _panelId: string): Promise<any> {
-        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
-    }
-
-    async addPanelButton(_guildId: string, _panelId: string, _button: any): Promise<any> {
-        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
-    }
-
-    async removePanelButton(_guildId: string, _panelId: string, _buttonId: string): Promise<any> {
-        throw new Error('[MCP] Reaction-roles are only available in IntegratedProvider mode.');
     }
 }
 

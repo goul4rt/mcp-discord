@@ -1,7 +1,7 @@
 {
     "name": "@goul4rt/mcp-discord",
-    "version": "0.1.8",
-    "description": "The most complete open-source MCP server for Discord — 30+ tools, dual-mode: integrated (plugin) or standalone",
+    "version": "0.2.0",
+    "description": "The most complete open-source MCP server for Discord — 80+ tools, dual-mode: integrated (plugin) or standalone, with host-extensible tool registry",
     "author": "goul4rt",
     "license": "MIT",
     "repository": {

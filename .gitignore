@@ -31,3 +31,6 @@ coverage/
 
 # Local design docs / plans (do not commit)
 docs/superpowers/
+
+# npm pack output
+*.tgz

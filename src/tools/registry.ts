@@ -13,9 +13,6 @@
 import { z } from 'zod';
 import type { DiscordProvider } from '../providers/discord-provider.js';
 import { snowflakeId, embedSchema, permissionFlags } from './schemas.js';
-import { actionLogTools } from './action-logs.js';
-import { autoRoleTools } from './auto-roles.js';
-import { reactionRoleTools } from './reaction-roles.js';
 
 // ─── Tool Definition Type ───────────────────────────────────────
 
@@ -35,9 +32,6 @@ export type ToolCategory =
     | 'events'
     | 'screening'
     | 'monitoring'
-    | 'action-logs'
-    | 'auto-roles'
-    | 'reaction-roles'
     | 'other';
 
 export interface ToolDefinition {
@@ -1369,9 +1363,6 @@ export const allTools: ToolDefinition[] = [
     ...applyMetadata(dmTools, 'dms'),
     ...applyMetadata(scheduledEventTools, 'events'),
     ...applyMetadata(screeningTools, 'screening'),
-    ...applyMetadata(actionLogTools, 'action-logs'),
-    ...applyMetadata(autoRoleTools, 'auto-roles'),
-    ...applyMetadata(reactionRoleTools, 'reaction-roles'),
 ];
 
 export const toolsByName = new Map<string, ToolDefinition>(
