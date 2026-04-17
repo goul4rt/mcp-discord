@@ -454,7 +454,8 @@ function normalizePermName(name: string): string[] {
     return [...candidates];
 }
 
-export function permissionNamesToBitfield(names: string[]): string {
+export function permissionNamesToBitfield(names: string[] | undefined | null): string {
+    if (!names || !Array.isArray(names) || names.length === 0) return '0';
     let bits = 0n;
     for (const name of names) {
         let bit: bigint | undefined;
