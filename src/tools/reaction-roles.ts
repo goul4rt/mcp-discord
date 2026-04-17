@@ -97,10 +97,16 @@ export const reactionRoleTools: ToolDefinition[] = [
                 .describe('Whether users can have multiple roles from this panel'),
             content: z.string().optional().describe('Plain text message above the embed (max 2000)'),
             embed_schema: z
-                .object({ embed: z.record(z.unknown()) })
+                .union([
+                    z.object({ embed: z.record(z.unknown()) }),
+                    z.record(z.unknown()).transform(raw => {
+                        if (raw && typeof raw === 'object' && 'embed' in raw) return raw as { embed: Record<string, unknown> };
+                        return { embed: raw as Record<string, unknown> };
+                    }),
+                ])
                 .nullable()
                 .optional()
-                .describe('Discord embed to display'),
+                .describe('Discord embed to display. Accepts either { embed: {...} } or { title, description, color, ... } (auto-wrapped).'),
             message_on_add: z
                 .string()
                 .optional()
