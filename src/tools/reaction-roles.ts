@@ -11,13 +11,36 @@ import type { DiscordProvider } from '../providers/discord-provider.js';
 import { snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './registry.js';
 
+const STYLE_ALIAS_MAP: Record<string, string> = {
+    primary: 'primary', blue: 'primary', blurple: 'primary', info: 'primary',
+    secondary: 'secondary', grey: 'secondary', gray: 'secondary', default: 'secondary', neutral: 'secondary',
+    success: 'success', green: 'success', positive: 'success',
+    danger: 'danger', red: 'danger', warning: 'danger', negative: 'danger', destructive: 'danger',
+};
+
+const styleSchema = z
+    .string()
+    .transform(s => STYLE_ALIAS_MAP[s.toLowerCase().trim()] ?? s)
+    .pipe(z.enum(['primary', 'secondary', 'success', 'danger']));
+
 const buttonSchema = z.object({
     id: z.string(),
     emoji: z.string().optional(),
     label: z.string(),
     roleId: snowflakeId,
-    style: z.enum(['primary', 'secondary', 'success', 'danger']),
+    style: styleSchema,
 });
+
+const embedSchemaResponse = z
+    .union([
+        z.object({ embed: z.record(z.unknown()) }),
+        z.record(z.unknown()).transform(raw => {
+            if (raw && typeof raw === 'object' && 'embed' in raw) return raw as { embed: Record<string, unknown> };
+            return { embed: raw as Record<string, unknown> };
+        }),
+    ])
+    .nullable()
+    .optional();
 
 const panelSchema = z.object({
     id: z.string(),
@@ -26,7 +49,7 @@ const panelSchema = z.object({
     channelId: snowflakeId,
     messageId: snowflakeId.optional(),
     content: z.string().optional(),
-    embedSchema: z.object({ embed: z.record(z.unknown()) }).nullable().optional(),
+    embedSchema: embedSchemaResponse,
     mode: z.enum(['standard', 'reverse']),
     allowMultiple: z.boolean(),
     buttons: z.array(buttonSchema),
@@ -40,6 +63,48 @@ const configResponseSchema = z.object({
     panels: z.array(panelSchema),
 });
 
+/**
+ * Safely parse config — skips panels with corrupted data (logged) instead of throwing.
+ * Use when reading stored data that may have been created before current schema rules.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Panel IDs are UUID v4. Any other string format is definitely a hallucinated placeholder. */
+function assertValidPanelId(panelId: string, context: string): void {
+    if (!UUID_RE.test(panelId)) {
+        throw new Error(
+            `Invalid panel_id "${panelId}" — panel IDs are UUIDs (ex: "914bc8bb-4c56-4c95-84bf-e96d70f625f9"). ` +
+            `Call get_reaction_roles_config first to retrieve real panel IDs. (context: ${context})`
+        );
+    }
+}
+
+function safeParseConfig(raw: unknown): z.infer<typeof configResponseSchema> {
+    const result = configResponseSchema.safeParse(raw);
+    if (result.success) return result.data;
+
+    // Fallback: parse panels individually, skip corrupted ones
+    const r = raw as { enabled?: boolean; panels?: unknown[] };
+    const validPanels: z.infer<typeof panelSchema>[] = [];
+    const corruptedIds: string[] = [];
+    for (const p of r?.panels ?? []) {
+        const panelResult = panelSchema.safeParse(p);
+        if (panelResult.success) {
+            validPanels.push(panelResult.data);
+        } else {
+            const pAny = p as { id?: string; name?: string };
+            corruptedIds.push(pAny?.id ?? pAny?.name ?? 'unknown');
+        }
+    }
+    if (corruptedIds.length > 0) {
+        console.warn(`[reaction-roles] Skipped ${corruptedIds.length} corrupted panel(s): ${corruptedIds.join(', ')}`);
+    }
+    return {
+        enabled: Boolean(r?.enabled),
+        panels: validPanels,
+    };
+}
+
 export const reactionRoleTools: ToolDefinition[] = [
     {
         name: 'get_reaction_roles_config',
@@ -49,7 +114,7 @@ export const reactionRoleTools: ToolDefinition[] = [
         }),
         handler: async (input, provider) => {
             const config = await provider.getReactionRolesConfig(input.guild_id);
-            return configResponseSchema.parse(config);
+            return safeParseConfig(config);
         },
     },
     {
@@ -61,7 +126,7 @@ export const reactionRoleTools: ToolDefinition[] = [
         }),
         handler: async (input, provider) => {
             const config = await provider.setReactionRolesEnabled(input.guild_id, input.enabled);
-            return configResponseSchema.parse(config);
+            return safeParseConfig(config);
         },
     },
     {
@@ -126,10 +191,47 @@ export const reactionRoleTools: ToolDefinition[] = [
                 .string()
                 .optional()
                 .describe('DM message to send when user loses the role (supports {cargo} placeholder)'),
+            deploy_after_create: z
+                .boolean()
+                .optional()
+                .default(true)
+                .describe('If true (default), automatically publishes the panel message to the channel after creation. Set to false to only persist without publishing.'),
+            allow_duplicate_name: z
+                .boolean()
+                .optional()
+                .default(false)
+                .describe('If false (default), refuses to create a panel with the same name as an existing one and returns an error listing the existing panel ID (so caller can update/delete instead). Set true to bypass.'),
         }),
         handler: async (input, provider) => {
+            // Validate name — reject empty/undefined up-front with a clear error so the
+            // model can fix it before persisting a corrupt entry.
+            if (!input.name || typeof input.name !== 'string' || input.name.trim().length === 0) {
+                throw new Error(
+                    `create_reaction_role_panel: "name" is required and must be a non-empty string (got: ${JSON.stringify(input.name)}).`
+                );
+            }
+            const cleanName = input.name.trim();
+
+            if (!input.allow_duplicate_name) {
+                const existing = await provider.getReactionRolesConfig(input.guild_id);
+                // Only treat as duplicate when the existing panel has a valid, non-empty name
+                // that matches (case-insensitive). This prevents legacy entries with
+                // undefined/empty names from blocking all new panels.
+                const dup = existing.panels.find(p => {
+                    if (!p.name || typeof p.name !== 'string' || p.name.trim().length === 0) return false;
+                    return p.name.trim().toLowerCase() === cleanName.toLowerCase();
+                });
+                if (dup) {
+                    throw new Error(
+                        `A panel named "${cleanName}" already exists (id=${dup.id}). ` +
+                        `Use update_reaction_role_panel to modify it, delete_reaction_role_panel to remove it, ` +
+                        `or set allow_duplicate_name=true to create a separate one with the same name.`
+                    );
+                }
+            }
+
             const panel = await provider.createReactionRolePanel(input.guild_id, {
-                name: input.name,
+                name: cleanName,
                 channelId: input.channel_id,
                 buttons: input.buttons.map((btn: any) => ({
                     emoji: btn.emoji,
@@ -144,6 +246,12 @@ export const reactionRoleTools: ToolDefinition[] = [
                 messageOnAdd: input.message_on_add,
                 messageOnRemove: input.message_on_remove,
             });
+
+            if (input.deploy_after_create) {
+                const { messageId } = await provider.deployReactionRolePanel(input.guild_id, panel.id);
+                return panelSchema.parse({ ...panel, messageId, deployedAt: new Date().toISOString() });
+            }
+
             return panelSchema.parse(panel);
         },
     },
@@ -166,6 +274,7 @@ export const reactionRoleTools: ToolDefinition[] = [
             message_on_remove: z.string().optional().describe('New DM on role remove'),
         }),
         handler: async (input, provider) => {
+            assertValidPanelId(input.panel_id, 'update_reaction_role_panel');
             const panel = await provider.updateReactionRolePanel(input.guild_id, input.panel_id, {
                 name: input.name,
                 mode: input.mode,
@@ -186,6 +295,7 @@ export const reactionRoleTools: ToolDefinition[] = [
             panel_id: z.string().describe('The panel ID to delete'),
         }),
         handler: async (input, provider) => {
+            assertValidPanelId(input.panel_id, 'delete_reaction_role_panel');
             await provider.deleteReactionRolePanel(input.guild_id, input.panel_id);
             return { success: true };
         },
@@ -198,6 +308,7 @@ export const reactionRoleTools: ToolDefinition[] = [
             panel_id: z.string().describe('The panel ID to deploy'),
         }),
         handler: async (input, provider) => {
+            assertValidPanelId(input.panel_id, 'deploy_reaction_role_panel');
             const result = await provider.deployReactionRolePanel(input.guild_id, input.panel_id);
             return { messageId: result.messageId };
         },
@@ -216,6 +327,7 @@ export const reactionRoleTools: ToolDefinition[] = [
             emoji: z.string().optional().describe('Button emoji'),
         }),
         handler: async (input, provider) => {
+            assertValidPanelId(input.panel_id, 'add_panel_button');
             const panel = await provider.addPanelButton(input.guild_id, input.panel_id, {
                 emoji: input.emoji,
                 label: input.label,
@@ -234,6 +346,7 @@ export const reactionRoleTools: ToolDefinition[] = [
             button_id: z.string().describe('The button ID to remove'),
         }),
         handler: async (input, provider) => {
+            assertValidPanelId(input.panel_id, 'remove_panel_button');
             const panel = await provider.removePanelButton(input.guild_id, input.panel_id, input.button_id);
             return panelSchema.parse(panel);
         },

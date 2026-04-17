@@ -227,19 +227,39 @@ const channelTools: ToolDefinition[] = [
 const messageTools: ToolDefinition[] = [
     {
         name: 'send_message',
-        description: 'Send a message to a Discord channel. Supports plain text, rich embeds, and replying to specific messages.',
+        description: 'Send a message to a Discord channel. Supports plain text, rich embeds, and replying to specific messages. REQUIRED: provide at least one of content (non-empty) OR embeds (non-empty array).',
         schema: z.object({
             channel_id: snowflakeId.describe('The channel to send the message to'),
             content: z.string().optional().describe('Text content of the message'),
-            embeds: z.array(embedSchema).optional().describe('Rich embed objects'),
+            embeds: z.array(embedSchema).optional().describe('Rich embed objects (array)'),
+            embed: embedSchema.optional().describe('Single embed — will be auto-wrapped as embeds=[this]. Accepted as alias for convenience.'),
             reply_to: snowflakeId.optional().describe('Message ID to reply to'),
         }),
-        handler: async (input, provider) => provider.sendMessage({
-            channelId: input.channel_id,
-            content: input.content,
-            embeds: input.embeds,
-            replyToMessageId: input.reply_to,
-        }),
+        handler: async (input, provider) => {
+            // Normalize: accept `embed` (singular) as alias for `embeds: [embed]`
+            let embeds = input.embeds;
+            if (!embeds && input.embed) embeds = [input.embed];
+
+            // Normalize: treat empty/whitespace content as undefined
+            const content = input.content && input.content.trim().length > 0 ? input.content : undefined;
+
+            // Validate: Discord requires at least one of content/embeds non-empty
+            const hasEmbeds = embeds && embeds.length > 0;
+            if (!content && !hasEmbeds) {
+                throw new Error(
+                    `send_message precisa de content (texto nao vazio) ou embeds (array com pelo menos 1 embed). ` +
+                    `Recebido: content="${input.content ?? ''}", embeds=${embeds ? `array(${embeds.length})` : 'undefined'}, embed=${input.embed ? 'presente' : 'undefined'}. ` +
+                    `Exemplo valido: { channel_id: "...", content: "Texto" } OU { channel_id: "...", embed: { title: "...", description: "..." } }.`
+                );
+            }
+
+            return provider.sendMessage({
+                channelId: input.channel_id,
+                content,
+                embeds,
+                replyToMessageId: input.reply_to,
+            });
+        },
     },
     {
         name: 'read_messages',
