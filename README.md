@@ -449,7 +449,7 @@ await provider.addReaction(channelId, messageId, {
                    │
 ┌──────────────────▼──────────────────────────────┐
 │            Tool Registry                         │
-│         (30+ tools, Zod validation)               │
+│         (80+ tools, Zod validation)               │
 └──────────────────┬──────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────┐
