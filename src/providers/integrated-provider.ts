@@ -180,6 +180,7 @@ export class IntegratedProvider implements DiscordProvider {
             parent: options.parentId,
             nsfw: options.nsfw,
             rateLimitPerUser: options.rateLimitPerUser,
+            userLimit: options.userLimit,
             position: options.position,
         });
         return mapChannel(channel);
@@ -193,6 +194,7 @@ export class IntegratedProvider implements DiscordProvider {
             topic: options.topic,
             nsfw: options.nsfw,
             rateLimitPerUser: options.rateLimitPerUser,
+            userLimit: options.userLimit,
             position: options.position,
             parent: options.parentId,
         });
@@ -454,6 +456,7 @@ export class IntegratedProvider implements DiscordProvider {
         const role = await guild.roles.create({
             name: options.name,
             color: options.color,
+            permissions: options.permissions ? BigInt(permissionNamesToBitfield(options.permissions)) : undefined,
             mentionable: options.mentionable,
             hoist: options.hoist,
         });

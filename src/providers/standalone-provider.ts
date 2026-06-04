@@ -327,6 +327,7 @@ export class StandaloneProvider implements DiscordProvider {
                 parent: options.parentId,
                 nsfw: options.nsfw,
                 rateLimitPerUser: options.rateLimitPerUser,
+                userLimit: options.userLimit,
                 position: options.position,
             });
             return mapChannel(channel);
@@ -343,6 +344,7 @@ export class StandaloneProvider implements DiscordProvider {
         if (options.parentId) body.parent_id = options.parentId;
         if (options.nsfw !== undefined) body.nsfw = options.nsfw;
         if (options.rateLimitPerUser !== undefined) body.rate_limit_per_user = options.rateLimitPerUser;
+        if (options.userLimit !== undefined) body.user_limit = options.userLimit;
 
         const c = (await this.rest.post(Routes.guildChannels(options.guildId), { body })) as any;
         return {
@@ -369,6 +371,7 @@ export class StandaloneProvider implements DiscordProvider {
                 topic: options.topic,
                 nsfw: options.nsfw,
                 rateLimitPerUser: options.rateLimitPerUser,
+                userLimit: options.userLimit,
                 position: options.position,
                 parent: options.parentId,
             });
@@ -380,6 +383,7 @@ export class StandaloneProvider implements DiscordProvider {
         if (options.topic !== undefined) body.topic = options.topic;
         if (options.nsfw !== undefined) body.nsfw = options.nsfw;
         if (options.rateLimitPerUser !== undefined) body.rate_limit_per_user = options.rateLimitPerUser;
+        if (options.userLimit !== undefined) body.user_limit = options.userLimit;
         if (options.position !== undefined) body.position = options.position;
         if (options.parentId !== undefined) body.parent_id = options.parentId;
 
@@ -741,6 +745,7 @@ export class StandaloneProvider implements DiscordProvider {
             const role = await guild.roles.create({
                 name: options.name,
                 color: options.color,
+                permissions: options.permissions ? BigInt(permissionNamesToBitfield(options.permissions)) : undefined,
                 mentionable: options.mentionable,
                 hoist: options.hoist,
             });
@@ -751,6 +756,7 @@ export class StandaloneProvider implements DiscordProvider {
             name: options.name,
         };
         if (options.color !== undefined) body.color = options.color;
+        if (options.permissions !== undefined) body.permissions = permissionNamesToBitfield(options.permissions);
         if (options.mentionable !== undefined) body.mentionable = options.mentionable;
         if (options.hoist !== undefined) body.hoist = options.hoist;
 

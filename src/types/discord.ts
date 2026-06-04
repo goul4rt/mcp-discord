@@ -63,6 +63,7 @@ export interface CreateChannelOptions {
     parentId?: string;
     nsfw?: boolean;
     rateLimitPerUser?: number;
+    userLimit?: number;
     position?: number;
 }
 
@@ -72,6 +73,7 @@ export interface EditChannelOptions {
     topic?: string;
     nsfw?: boolean;
     rateLimitPerUser?: number;
+    userLimit?: number;
     position?: number;
     parentId?: string | null;
 }

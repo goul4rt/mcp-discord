@@ -197,6 +197,25 @@ describe('channel tools', () => {
         expect(() => tool.schema.parse({ guild_id: GUILD, name: 'x', type: 'bogus' })).toThrow();
     });
 
+    it('create_channel forwards user_limit as userLimit for voice channels', async () => {
+        const tool = findTool('create_channel');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { guild_id: GUILD, name: 'call', type: 'voice', user_limit: 5 },
+            provider,
+        );
+        expect(provider.createChannel).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'call', type: 'voice', userLimit: 5 }),
+        );
+    });
+
+    it('create_channel schema rejects user_limit above 99', () => {
+        const tool = findTool('create_channel');
+        expect(() =>
+            tool.schema.parse({ guild_id: GUILD, name: 'call', type: 'voice', user_limit: 100 }),
+        ).toThrow();
+    });
+
     it('edit_channel transforms snake_case to camelCase and passes null parent', async () => {
         const tool = findTool('edit_channel');
         const provider = makeStubProvider();
@@ -222,6 +241,15 @@ describe('channel tools', () => {
             position: 2,
             parentId: null,
         });
+    });
+
+    it('edit_channel forwards user_limit as userLimit', async () => {
+        const tool = findTool('edit_channel');
+        const provider = makeStubProvider();
+        await tool.handler({ channel_id: CHANNEL, user_limit: 0 }, provider);
+        expect(provider.editChannel).toHaveBeenCalledWith(
+            expect.objectContaining({ channelId: CHANNEL, userLimit: 0 }),
+        );
     });
 
     it('delete_channel returns success payload and calls provider.deleteChannel', async () => {
@@ -501,6 +529,24 @@ describe('role tools', () => {
             color: 0xff00ff,
             mentionable: true,
             hoist: true,
+        });
+    });
+
+    it('create_role forwards permission flag names', async () => {
+        const tool = findTool('create_role');
+        const provider = makeStubProvider();
+        await tool.handler(
+            {
+                guild_id: GUILD,
+                name: 'Mod',
+                permissions: ['KickMembers', 'ManageMessages'],
+            },
+            provider,
+        );
+        expect(provider.createRole).toHaveBeenCalledWith({
+            guildId: GUILD,
+            name: 'Mod',
+            permissions: ['KickMembers', 'ManageMessages'],
         });
     });
 
