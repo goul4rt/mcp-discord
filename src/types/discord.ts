@@ -244,6 +244,10 @@ export interface CreateThreadOptions {
     name: string;
     messageId?: string;
     autoArchiveDuration?: 60 | 1440 | 4320 | 10080;
+    /** Create a private thread (ignored when starting from an existing message). */
+    private?: boolean;
+    /** Optional starter message posted into the thread after creation. */
+    content?: string;
     reason?: string;
 }
 

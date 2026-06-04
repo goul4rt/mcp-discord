@@ -226,8 +226,12 @@ export class IntegratedProvider implements DiscordProvider {
             thread = await textChannel.threads.create({
                 name: options.name,
                 autoArchiveDuration: options.autoArchiveDuration,
+                type: options.private ? DjsChannelType.PrivateThread : undefined,
                 reason: options.reason,
             });
+        }
+        if (options.content) {
+            await (thread as ThreadChannel).send(options.content.slice(0, 2000));
         }
         return mapChannel(thread as unknown as GuildBasedChannel);
     }

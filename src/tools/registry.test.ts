@@ -287,6 +287,23 @@ describe('channel tools', () => {
         expect(() => tool.schema.parse({ channel_id: CHANNEL, name: 'x', auto_archive_duration: '99' })).toThrow();
     });
 
+    it('create_thread forwards private and starter content', async () => {
+        const tool = findTool('create_thread');
+        const provider = makeStubProvider();
+        await tool.handler(
+            { channel_id: CHANNEL, name: 'staff', private: true, content: 'bem-vindos' },
+            provider,
+        );
+        expect(provider.createThread).toHaveBeenCalledWith(
+            expect.objectContaining({
+                channelId: CHANNEL,
+                name: 'staff',
+                private: true,
+                content: 'bem-vindos',
+            }),
+        );
+    });
+
     it('archive_thread returns success payload and calls provider.archiveThread', async () => {
         const tool = findTool('archive_thread');
         const provider = makeStubProvider();

@@ -195,6 +195,8 @@ const channelTools: ToolDefinition[] = [
             name: z.string().describe('Thread name'),
             message_id: snowflakeId.optional().describe('Message ID to create thread from'),
             auto_archive_duration: z.enum(['60', '1440', '4320', '10080']).optional().describe('Auto-archive after minutes: 60 (1h), 1440 (1d), 4320 (3d), 10080 (7d)'),
+            private: z.boolean().optional().describe('Create a private thread (ignored when message_id is set)'),
+            content: z.string().optional().describe('Optional starter message posted into the thread after creation'),
             reason: z.string().optional(),
         }),
         handler: async (input, provider) => provider.createThread({
@@ -202,6 +204,8 @@ const channelTools: ToolDefinition[] = [
             name: input.name,
             messageId: input.message_id,
             autoArchiveDuration: input.auto_archive_duration ? Number(input.auto_archive_duration) as any : undefined,
+            private: input.private,
+            content: input.content,
             reason: input.reason,
         }),
     },
