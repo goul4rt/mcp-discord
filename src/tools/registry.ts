@@ -85,6 +85,55 @@ function applyMetadata(
     }));
 }
 
+// ─── Channel name find/replace (pure, shared with hosts for previews) ───
+
+export interface ChannelRename {
+    id: string;
+    oldName: string;
+    newName: string;
+}
+
+export interface ChannelRenameOptions {
+    find: string;
+    replace: string;
+    regex?: boolean;
+    categoryId?: string;
+}
+
+// ponytail: heuristic ReDoS guard (nested quantifier like `(a+)+`); names are <=100 chars and a
+// guild has <=500 channels, so only catastrophic backtracking matters. Alternation-based blowups
+// (`(a|aa)+`) slip through; swap for re2 if that ever bites.
+const NESTED_QUANTIFIER = /[+*}]\)[+*{?]/;
+
+function buildMatcher(opts: ChannelRenameOptions): (name: string) => string {
+    if (!opts.find) throw new Error('find must not be empty');
+    if (!opts.regex) return name => name.split(opts.find).join(opts.replace);
+    if (opts.find.length > 100 || NESTED_QUANTIFIER.test(opts.find)) {
+        throw new Error('regex rejected: too long or nested quantifier');
+    }
+    const re = new RegExp(opts.find, 'gu');
+    return name => name.replace(re, opts.replace);
+}
+
+/**
+ * Returns the channels whose name changes under the find/replace, without touching Discord.
+ * Literal match by default (case-sensitive, Unicode-safe); `regex` = JS RegExp with g+u flags.
+ * Throws on an empty `find` or an invalid/rejected regex.
+ */
+export function planChannelRenames(
+    channels: { id: string; name: string; parentId: string | null }[],
+    opts: ChannelRenameOptions
+): ChannelRename[] {
+    const rename = buildMatcher(opts);
+    const out: ChannelRename[] = [];
+    for (const c of channels) {
+        if (opts.categoryId && c.parentId !== opts.categoryId) continue;
+        const newName = rename(c.name);
+        if (newName !== c.name) out.push({ id: c.id, oldName: c.name, newName });
+    }
+    return out;
+}
+
 // ═════════════════════════════════════════════════════════════════
 // SERVER / GUILD TOOLS
 // ═════════════════════════════════════════════════════════════════
@@ -174,6 +223,38 @@ const channelTools: ToolDefinition[] = [
             position: input.position,
             parentId: input.parent_id,
         }),
+    },
+    {
+        name: 'replace_in_channel_names',
+        description: 'Find-and-replace text in the names of ALL channels of a server (optionally only the channels inside one category) in ONE call. The server lists and renames the matching channels itself, so do NOT call get_channels or edit_channel once per channel. Literal, case-sensitive match by default (Unicode-safe, e.g. "ᯓ" -> "〢"); set regex=true to use a JavaScript regular expression (global + unicode flags, $1 backrefs in replace). Channels whose name does not change are skipped. Renames run one at a time to respect Discord rate limits, so many channels take a while. Returns { matched, renamed: [{id, oldName, newName}], failed: [{id, oldName, newName, error}] }.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The Discord server (guild) ID'),
+            find: z.string().min(1).max(100).describe('Text (or regex when regex=true) to look for in channel names'),
+            replace: z.string().max(100).describe('Replacement text (may be empty to remove the match)'),
+            regex: z.boolean().optional().describe('Treat find as a JavaScript regular expression (default false = literal)'),
+            category_id: snowflakeId.optional().describe('Only rename channels inside this category'),
+        }),
+        handler: async (input, provider) => {
+            const planned = planChannelRenames(await provider.getChannels(input.guild_id), {
+                find: input.find,
+                replace: input.replace,
+                regex: input.regex,
+                categoryId: input.category_id,
+            });
+            const renamed: ChannelRename[] = [];
+            const failed: (ChannelRename & { error: string })[] = [];
+            // Sequential on purpose: Discord buckets PATCH /channels/{id} per channel (name edits are
+            // ~2 per 10 min per channel) plus the global limit; discord.js queues and waits on 429s.
+            for (const r of planned) {
+                try {
+                    const edited = await provider.editChannel({ channelId: r.id, name: r.newName });
+                    renamed.push({ ...r, newName: edited?.name ?? r.newName });
+                } catch (error) {
+                    failed.push({ ...r, error: error instanceof Error ? error.message : String(error) });
+                }
+            }
+            return { success: failed.length === 0, matched: planned.length, renamed, failed };
+        },
     },
     {
         name: 'delete_channel',

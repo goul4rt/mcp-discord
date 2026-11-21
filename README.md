@@ -308,7 +308,7 @@ await provider.addReaction(channelId, messageId, {
 | `list_servers` | List all Discord servers the bot has access to |
 | `get_server_info` | Get detailed info about a specific server |
 
-### Channels (7 tools)
+### Channels (8 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -316,6 +316,7 @@ await provider.addReaction(channelId, messageId, {
 | `get_channel` | Get detailed info about a channel |
 | `create_channel` | Create text, voice, category, announcement, forum, or stage channels |
 | `edit_channel` | Edit channel name, topic, NSFW, slowmode, position, category |
+| `replace_in_channel_names` | Find-and-replace text in the names of all channels (optionally one category) in one call; literal or regex; returns `{ id, oldName, newName }` per renamed channel |
 | `delete_channel` | Permanently delete a channel |
 | `create_thread` | Create a thread in a channel (optionally from a message) |
 | `archive_thread` | Archive a thread |
