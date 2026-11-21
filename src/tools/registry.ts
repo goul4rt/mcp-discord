@@ -100,15 +100,44 @@ export interface ChannelRenameOptions {
     categoryId?: string;
 }
 
-// ponytail: heuristic ReDoS guard (nested quantifier like `(a+)+`); names are <=100 chars and a
-// guild has <=500 channels, so only catastrophic backtracking matters. Alternation-based blowups
-// (`(a|aa)+`) slip through; swap for re2 if that ever bites.
-const NESTED_QUANTIFIER = /[+*}]\)[+*{?]/;
+// ponytail: structural ReDoS guard — rejects a repeated group (`+`, `*`, `{n,}`) that contains a
+// quantifier at any depth (`(a+)+`, `((a+))+`, `(?:a*b)*`). Names are <=100 chars and a guild has
+// <=500 channels, so only catastrophic backtracking matters. Alternation-based blowups (`(a|aa)+`)
+// still slip through; swap for re2 if that ever bites.
+function hasNestedQuantifier(src: string): boolean {
+    const groups: boolean[] = []; // per open group: does it contain a quantifier?
+    let inClass = false;
+    let closedHadQuantifier: boolean | null = null; // set right after `)`
+    for (let i = 0; i < src.length; i++) {
+        const ch = src[i];
+        const afterClose = closedHadQuantifier;
+        closedHadQuantifier = null;
+        if (ch === '\\') {
+            i++;
+            continue;
+        }
+        if (inClass) {
+            if (ch === ']') inClass = false;
+            continue;
+        }
+        if (ch === '[') inClass = true;
+        else if (ch === '(') groups.push(false);
+        else if (ch === ')') {
+            const had = groups.pop() ?? false;
+            if (had && groups.length) groups[groups.length - 1] = true;
+            closedHadQuantifier = had;
+        } else if (ch === '+' || ch === '*' || ch === '{' || (ch === '?' && src[i - 1] !== '(')) {
+            if (afterClose && ch !== '?') return true;
+            if (groups.length) groups[groups.length - 1] = true;
+        }
+    }
+    return false;
+}
 
 function buildMatcher(opts: ChannelRenameOptions): (name: string) => string {
     if (!opts.find) throw new Error('find must not be empty');
     if (!opts.regex) return name => name.split(opts.find).join(opts.replace);
-    if (opts.find.length > 100 || NESTED_QUANTIFIER.test(opts.find)) {
+    if (opts.find.length > 100 || hasNestedQuantifier(opts.find)) {
         throw new Error('regex rejected: too long or nested quantifier');
     }
     const re = new RegExp(opts.find, 'gu');

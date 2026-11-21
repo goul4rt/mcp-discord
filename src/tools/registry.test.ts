@@ -1856,6 +1856,17 @@ describe('planChannelRenames', () => {
         expect(() => planChannelRenames(channels, { find: '(', replace: 'x', regex: true })).toThrow();
         expect(() => planChannelRenames(channels, { find: '(a+)+$', replace: 'x', regex: true })).toThrow(/nested/);
     });
+
+    it('rejects nested repetition hidden behind extra groups, keeps ordinary groups', () => {
+        const nested = ['^((a+))+$', '(?:a*b)*', '((a)+)*', '(x(a{2,})y){3,}'];
+        for (const find of nested) {
+            expect(() => planChannelRenames(channels, { find, replace: 'x', regex: true }), find).toThrow(/nested/);
+        }
+        const ok = ['^(\\w+)-(\\d+)$', '(?:ab)+', '[(a+)]+', '(a+)?', '\\(a+\\)+', '(ᯓ)・(.*)'];
+        for (const find of ok) {
+            expect(() => planChannelRenames(channels, { find, replace: 'x', regex: true }), find).not.toThrow();
+        }
+    });
 });
 
 describe('replace_in_channel_names tool', () => {
@@ -1881,6 +1892,7 @@ describe('replace_in_channel_names tool', () => {
             { id: '1', name: 'ᯓ・geral', parentId: null },
             { id: '2', name: 'regras', parentId: null },
             { id: '3', name: 'ᯓ・avisos', parentId: null },
+            { id: '4', name: 'ᯓ・regras-finais', parentId: null },
         ]);
         (provider.editChannel as any).mockImplementation(async ({ channelId, name }: any) => {
             if (channelId === '3') throw new Error('Missing Permissions');
@@ -1893,12 +1905,15 @@ describe('replace_in_channel_names tool', () => {
         );
 
         expect(provider.getChannels).toHaveBeenCalledWith(guild_id);
-        expect(provider.editChannel).toHaveBeenCalledTimes(2);
+        expect(provider.editChannel).toHaveBeenCalledTimes(3);
         expect(provider.editChannel).toHaveBeenNthCalledWith(1, { channelId: '1', name: '〢・geral' });
         expect(out).toEqual({
             success: false,
-            matched: 2,
-            renamed: [{ id: '1', oldName: 'ᯓ・geral', newName: '〢・geral' }],
+            matched: 3,
+            renamed: [
+                { id: '1', oldName: 'ᯓ・geral', newName: '〢・geral' },
+                { id: '4', oldName: 'ᯓ・regras-finais', newName: '〢・regras-finais' },
+            ],
             failed: [
                 { id: '3', oldName: 'ᯓ・avisos', newName: '〢・avisos', error: 'Missing Permissions' },
             ],
