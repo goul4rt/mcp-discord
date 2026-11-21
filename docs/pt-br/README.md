@@ -120,7 +120,7 @@ Adicione ao seu arquivo de configuracao MCP:
 | `list_servers` | Lista todos os servidores Discord que o bot tem acesso |
 | `get_server_info` | Obtem informacoes detalhadas sobre um servidor especifico |
 
-### Canais (7 ferramentas)
+### Canais (8 ferramentas)
 
 | Ferramenta | Descricao |
 |------------|-----------|
@@ -128,6 +128,7 @@ Adicione ao seu arquivo de configuracao MCP:
 | `get_channel` | Obtem informacoes detalhadas sobre um canal |
 | `create_channel` | Cria canais de texto, voz, categoria, anuncio, forum ou palco |
 | `edit_channel` | Edita nome, topico, NSFW, slowmode, posicao e categoria do canal |
+| `replace_in_channel_names` | Troca um trecho no nome de todos os canais (opcionalmente só de uma categoria) numa única chamada; literal ou regex; devolve `{ id, oldName, newName }` de cada canal renomeado |
 | `delete_channel` | Exclui permanentemente um canal |
 | `create_thread` | Cria uma thread em um canal (opcionalmente a partir de uma mensagem) |
 | `archive_thread` | Arquiva uma thread |

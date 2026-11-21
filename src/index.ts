@@ -38,8 +38,8 @@ export { createMcpServer } from './server.js';
 export type { CreateServerOptions } from './server.js';
 
 // Tool registry (for advanced use — extending or filtering tools)
-export { allTools, toolsByName } from './tools/registry.js';
-export type { ToolDefinition, ToolCategory } from './tools/registry.js';
+export { allTools, toolsByName, planChannelRenames } from './tools/registry.js';
+export type { ToolDefinition, ToolCategory, ChannelRename, ChannelRenameOptions } from './tools/registry.js';
 
 // Types
 export * from './types/discord.js';

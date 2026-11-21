@@ -1,6 +1,6 @@
 // src/tools/registry.test.ts
 import { describe, it, expect, vi } from 'vitest';
-import { allTools, toolsByName, type ToolDefinition } from './registry.js';
+import { allTools, toolsByName, planChannelRenames, type ToolDefinition } from './registry.js';
 import type { DiscordProvider } from '../providers/discord-provider.js';
 import { makeServerStubs } from './__test_helpers__/stubs/server.js';
 import { makeChannelStubs } from './__test_helpers__/stubs/channels.js';
@@ -77,7 +77,7 @@ describe('snowflake ID schema', () => {
 
 describe('tool registry', () => {
     it('exposes all tools via allTools', () => {
-        expect(allTools).toHaveLength(82);
+        expect(allTools).toHaveLength(83);
     });
 
     it('has a unique name per tool', () => {
@@ -1802,5 +1802,156 @@ describe('scheduled event tools', () => {
         );
         expect(provider.createEventInvite).toHaveBeenCalledWith(GUILD, EVENT, CHANNEL);
         expect(result).toEqual({ code: 'abc', url: 'https://discord.gg/abc?event=ev1', eventId: 'ev1' });
+    });
+});
+
+// ─── replace_in_channel_names ───────────────────────────────────
+
+describe('planChannelRenames', () => {
+    const channels = [
+        { id: '1', name: 'ᯓ・geral', parentId: null },
+        { id: '2', name: 'ᯓ・avisos', parentId: '10' },
+        { id: '3', name: 'regras', parentId: '10' },
+        { id: '4', name: 'ᯓ・ᯓ・duplo', parentId: '10' },
+    ];
+
+    it('replaces a unicode literal in every matching name (all occurrences)', () => {
+        expect(planChannelRenames(channels, { find: 'ᯓ', replace: '〢' })).toEqual([
+            { id: '1', oldName: 'ᯓ・geral', newName: '〢・geral' },
+            { id: '2', oldName: 'ᯓ・avisos', newName: '〢・avisos' },
+            { id: '4', oldName: 'ᯓ・ᯓ・duplo', newName: '〢・〢・duplo' },
+        ]);
+    });
+
+    it('treats the literal as literal (regex metachars, $ in replace)', () => {
+        const out = planChannelRenames([{ id: '1', name: 'a.b|c', parentId: null }], {
+            find: '.',
+            replace: '$1',
+        });
+        expect(out).toEqual([{ id: '1', oldName: 'a.b|c', newName: 'a$1b|c' }]);
+    });
+
+    it('is case-sensitive and skips names that do not change', () => {
+        expect(planChannelRenames(channels, { find: 'GERAL', replace: 'x' })).toEqual([]);
+    });
+
+    it('limits to one category when categoryId is set', () => {
+        const out = planChannelRenames(channels, { find: 'ᯓ', replace: '〢', categoryId: '10' });
+        expect(out.map(r => r.id)).toEqual(['2', '4']);
+    });
+
+    it('supports regex with backrefs and the unicode flag (astral emoji as one char)', () => {
+        const out = planChannelRenames(
+            [
+                { id: '1', name: '📢-avisos-01', parentId: null },
+                { id: '2', name: 'chat', parentId: null },
+            ],
+            { find: '^(.)-(\\w+)-\\d+$', replace: '$1・$2', regex: true }
+        );
+        expect(out).toEqual([{ id: '1', oldName: '📢-avisos-01', newName: '📢・avisos' }]);
+    });
+
+    it('rejects empty find, invalid regex and nested quantifiers', () => {
+        expect(() => planChannelRenames(channels, { find: '', replace: 'x' })).toThrow();
+        expect(() => planChannelRenames(channels, { find: '(', replace: 'x', regex: true })).toThrow();
+        expect(() => planChannelRenames(channels, { find: '(a+)+$', replace: 'x', regex: true })).toThrow(/nested/);
+    });
+
+    it('rejects nested repetition hidden behind extra groups, keeps ordinary groups', () => {
+        const nested = ['^((a+))+$', '(?:a*b)*', '((a)+)*', '(x(a{2,})y){3,}'];
+        for (const find of nested) {
+            expect(() => planChannelRenames(channels, { find, replace: 'x', regex: true }), find).toThrow(/nested/);
+        }
+        const ok = ['^(\\w+)-(\\d+)$', '(?:ab)+', '[(a+)]+', '(a+)?', '\\(a+\\)+', '(ᯓ)・(.*)'];
+        for (const find of ok) {
+            expect(() => planChannelRenames(channels, { find, replace: 'x', regex: true }), find).not.toThrow();
+        }
+    });
+
+    it('rejects alternation in a repeated group and too many unbounded quantifiers, fast', () => {
+        // Each of these took seconds on a 25-100 char name before the guard (event loop frozen).
+        const slowName = 'regras-e-informacoes-gerais-' + 'a'.repeat(60);
+        const many = Array.from({ length: 500 }, (_, i) => ({ id: String(i), name: slowName, parentId: null }));
+        const dangerous = ['(a|a)+$', '(.|.)+!', '(a|aa)*$', '((a|b))+', '(x(a|b)y){2,}', '.*.*.*!', '(.*){3}!', '(a+){10}$', '(.|.){20}!'];
+        for (const find of dangerous) {
+            const t = performance.now();
+            expect(() => planChannelRenames(many, { find, replace: 'x', regex: true }), find).toThrow(/regex rejected/);
+            expect(performance.now() - t, find).toBeLessThan(50);
+        }
+    });
+
+    it('accepts bounded repeats and \\p{…}/\\u{…}/\\k<…> escapes, and runs them fast', () => {
+        const ok = ['(\\p{L})+', '(\\u{1F4E2})+', '(\\d+){2}', '(?<n>a)\\k<n>+', '(a|b){3}', '(\\p{Emoji})・(.*)', '(?:ab){2}-\\d+?'];
+        const many = Array.from({ length: 500 }, (_, i) => ({ id: String(i), name: 'a'.repeat(100), parentId: null }));
+        for (const find of ok) {
+            const t = performance.now();
+            expect(() => planChannelRenames(many, { find, replace: 'x', regex: true }), find).not.toThrow();
+            expect(performance.now() - t, find).toBeLessThan(500);
+        }
+        const out = planChannelRenames([{ id: '1', name: '📢・avisos', parentId: null }], { find: '\\u{1F4E2}', replace: '〢', regex: true });
+        expect(out[0].newName).toBe('〢・avisos');
+    });
+});
+
+describe('replace_in_channel_names tool', () => {
+    const guild_id = '123456789012345678';
+
+    it('schema requires find and validates category_id', () => {
+        const tool = findTool('replace_in_channel_names');
+        expect(() => tool.schema.parse({ guild_id, find: 'ᯓ', replace: '〢' })).not.toThrow();
+        expect(() => tool.schema.parse({ guild_id, find: '', replace: '〢' })).toThrow();
+        expect(() => tool.schema.parse({ guild_id, replace: '〢' })).toThrow();
+        expect(() => tool.schema.parse({ guild_id, find: 'a', replace: 'b', category_id: 'x' })).toThrow();
+    });
+
+    it('is a non-destructive channels tool', () => {
+        const tool = findTool('replace_in_channel_names');
+        expect(tool.category).toBe('channels');
+        expect(tool.isDestructive).toBe(false);
+    });
+
+    it('renames each match sequentially and reports renamed + failed', async () => {
+        const provider = makeStubProvider();
+        (provider.getChannels as any).mockResolvedValue([
+            { id: '1', name: 'ᯓ・geral', parentId: null },
+            { id: '2', name: 'regras', parentId: null },
+            { id: '3', name: 'ᯓ・avisos', parentId: null },
+            { id: '4', name: 'ᯓ・regras-finais', parentId: null },
+        ]);
+        (provider.editChannel as any).mockImplementation(async ({ channelId, name }: any) => {
+            if (channelId === '3') throw new Error('Missing Permissions');
+            return { id: channelId, name };
+        });
+
+        const out = await findTool('replace_in_channel_names').handler(
+            { guild_id, find: 'ᯓ', replace: '〢' },
+            provider
+        );
+
+        expect(provider.getChannels).toHaveBeenCalledWith(guild_id);
+        expect(provider.editChannel).toHaveBeenCalledTimes(3);
+        expect(provider.editChannel).toHaveBeenNthCalledWith(1, { channelId: '1', name: '〢・geral' });
+        expect(out).toEqual({
+            success: false,
+            matched: 3,
+            renamed: [
+                { id: '1', oldName: 'ᯓ・geral', newName: '〢・geral' },
+                { id: '4', oldName: 'ᯓ・regras-finais', newName: '〢・regras-finais' },
+            ],
+            failed: [
+                { id: '3', oldName: 'ᯓ・avisos', newName: '〢・avisos', error: 'Missing Permissions' },
+            ],
+        });
+    });
+
+    it('reports the name Discord actually stored', async () => {
+        const provider = makeStubProvider();
+        (provider.getChannels as any).mockResolvedValue([{ id: '1', name: 'a', parentId: null }]);
+        (provider.editChannel as any).mockResolvedValue({ id: '1', name: 'b-c' });
+        const out = await findTool('replace_in_channel_names').handler(
+            { guild_id, find: 'a', replace: 'B C' },
+            provider
+        );
+        expect(out.renamed).toEqual([{ id: '1', oldName: 'a', newName: 'b-c' }]);
     });
 });

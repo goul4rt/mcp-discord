@@ -85,6 +85,136 @@ function applyMetadata(
     }));
 }
 
+// ─── Channel name find/replace (pure, shared with hosts for previews) ───
+
+export interface ChannelRename {
+    id: string;
+    oldName: string;
+    newName: string;
+}
+
+export interface ChannelRenameOptions {
+    find: string;
+    replace: string;
+    regex?: boolean;
+    categoryId?: string;
+}
+
+// ponytail: structural ReDoS guard instead of a regex engine swap (upgrade path: re2). Rejects:
+//  - a repeated group (`+`, `*`, `{n,}`) holding a quantifier or `|` at any depth
+//    (`(a+)+`, `(?:a*b)*`, `(a|a)+$`, `(.|.)+!`);
+//  - such a group repeated `{n}`/`{n,m}` more than 3 times (`(a+){10}`);
+//  - more than 2 unbounded quantifiers overall, `(\d+){2}` counting as 2 (`.*.*.*!` already costs
+//    ~12 ms per 100-char name, x500 channels on the event loop).
+// `{n}`/`{n,m}` are bounded; `\p{…}`, `\u{…}`, `\k<…>` are skipped as a single atom.
+const MAX_UNBOUNDED_QUANTIFIERS = 2;
+const MAX_AMBIGUOUS_GROUP_REPEAT = 3;
+
+interface Quantifier {
+    len: number;
+    unbounded: boolean;
+    max: number;
+    exact: boolean; // `{n}`: matches one way only
+}
+
+function readQuantifier(src: string, i: number): Quantifier | null {
+    let q: Quantifier | null = null;
+    const ch = src[i];
+    if (ch === '+' || ch === '*') q = { len: 1, unbounded: true, max: Infinity, exact: false };
+    else if (ch === '?') q = { len: 1, unbounded: false, max: 1, exact: false };
+    else if (ch === '{') {
+        const m = /^\{(\d+)(,(\d*))?\}/.exec(src.slice(i));
+        if (m) {
+            const unbounded = m[2] !== undefined && m[3] === '';
+            const max = unbounded ? Infinity : Number(m[3] ?? m[1]);
+            q = { len: m[0].length, unbounded, max, exact: m[2] === undefined };
+        }
+    }
+    if (q && src[i + q.len] === '?') q.len++; // lazy suffix
+    return q;
+}
+
+/** Returns why `src` is rejected as a ReDoS risk, or null when it is accepted. */
+function regexRejection(src: string): string | null {
+    // Per open group: effective unbounded quantifiers, and whether it can match one string many ways.
+    const stack: { unbounded: number; ambiguous: boolean }[] = [{ unbounded: 0, ambiguous: false }];
+    const top = () => stack[stack.length - 1];
+    let inClass = false;
+    for (let i = 0; i < src.length; i++) {
+        const ch = src[i];
+        if (ch === '\\') {
+            const next = src[i + 1];
+            const close =
+                (next === 'p' || next === 'P' || next === 'u') && src[i + 2] === '{' ? '}' : next === 'k' && src[i + 2] === '<' ? '>' : null;
+            const end = close ? src.indexOf(close, i + 2) : -1;
+            i = end > 0 ? end : i + 1;
+            continue;
+        }
+        if (inClass) {
+            if (ch === ']') inClass = false;
+            continue;
+        }
+        if (ch === '[') inClass = true;
+        else if (ch === '|') top().ambiguous = true;
+        else if (ch === '(') {
+            stack.push({ unbounded: 0, ambiguous: false });
+            if (src[i + 1] === '?') i++; // `(?:`, `(?=`, `(?<name>`: not a quantifier
+        } else if (ch === ')' && stack.length > 1) {
+            const group = stack.pop()!;
+            const parent = top();
+            const q = readQuantifier(src, i + 1);
+            if (!q) {
+                parent.unbounded += group.unbounded;
+                parent.ambiguous ||= group.ambiguous;
+                continue;
+            }
+            i += q.len;
+            if (group.ambiguous && (q.unbounded || q.max > MAX_AMBIGUOUS_GROUP_REPEAT)) {
+                return 'nested quantifier or alternation inside a repeated group';
+            }
+            parent.unbounded += q.unbounded ? group.unbounded + 1 : group.unbounded * q.max;
+            parent.ambiguous ||= group.ambiguous || !q.exact;
+        } else {
+            const q = readQuantifier(src, i);
+            if (!q) continue;
+            i += q.len - 1;
+            if (q.unbounded) top().unbounded++;
+            if (!q.exact) top().ambiguous = true;
+        }
+    }
+    if (stack[0].unbounded > MAX_UNBOUNDED_QUANTIFIERS) return `more than ${MAX_UNBOUNDED_QUANTIFIERS} unbounded quantifiers`;
+    return null;
+}
+
+function buildMatcher(opts: ChannelRenameOptions): (name: string) => string {
+    if (!opts.find) throw new Error('find must not be empty');
+    if (!opts.regex) return name => name.split(opts.find).join(opts.replace);
+    if (opts.find.length > 100) throw new Error('regex rejected: longer than 100 characters');
+    const rejection = regexRejection(opts.find);
+    if (rejection) throw new Error(`regex rejected: ${rejection}`);
+    const re = new RegExp(opts.find, 'gu');
+    return name => name.replace(re, opts.replace);
+}
+
+/**
+ * Returns the channels whose name changes under the find/replace, without touching Discord.
+ * Literal match by default (case-sensitive, Unicode-safe); `regex` = JS RegExp with g+u flags.
+ * Throws on an empty `find` or an invalid/rejected regex.
+ */
+export function planChannelRenames(
+    channels: { id: string; name: string; parentId: string | null }[],
+    opts: ChannelRenameOptions
+): ChannelRename[] {
+    const rename = buildMatcher(opts);
+    const out: ChannelRename[] = [];
+    for (const c of channels) {
+        if (opts.categoryId && c.parentId !== opts.categoryId) continue;
+        const newName = rename(c.name);
+        if (newName !== c.name) out.push({ id: c.id, oldName: c.name, newName });
+    }
+    return out;
+}
+
 // ═════════════════════════════════════════════════════════════════
 // SERVER / GUILD TOOLS
 // ═════════════════════════════════════════════════════════════════
@@ -174,6 +304,38 @@ const channelTools: ToolDefinition[] = [
             position: input.position,
             parentId: input.parent_id,
         }),
+    },
+    {
+        name: 'replace_in_channel_names',
+        description: 'Find-and-replace text in the names of ALL channels of a server (optionally only the channels inside one category) in ONE call. The server lists and renames the matching channels itself, so do NOT call get_channels or edit_channel once per channel. Literal, case-sensitive match by default (Unicode-safe, e.g. "ᯓ" -> "〢"); set regex=true to use a JavaScript regular expression (global + unicode flags, $1 backrefs in replace). Channels whose name does not change are skipped. Renames run one at a time to respect Discord rate limits, so many channels take a while. Returns { matched, renamed: [{id, oldName, newName}], failed: [{id, oldName, newName, error}] }.',
+        schema: z.object({
+            guild_id: snowflakeId.describe('The Discord server (guild) ID'),
+            find: z.string().min(1).max(100).describe('Text (or regex when regex=true) to look for in channel names'),
+            replace: z.string().max(100).describe('Replacement text (may be empty to remove the match)'),
+            regex: z.boolean().optional().describe('Treat find as a JavaScript regular expression (default false = literal)'),
+            category_id: snowflakeId.optional().describe('Only rename channels inside this category'),
+        }),
+        handler: async (input, provider) => {
+            const planned = planChannelRenames(await provider.getChannels(input.guild_id), {
+                find: input.find,
+                replace: input.replace,
+                regex: input.regex,
+                categoryId: input.category_id,
+            });
+            const renamed: ChannelRename[] = [];
+            const failed: (ChannelRename & { error: string })[] = [];
+            // Sequential on purpose: Discord buckets PATCH /channels/{id} per channel (name edits are
+            // ~2 per 10 min per channel) plus the global limit; discord.js queues and waits on 429s.
+            for (const r of planned) {
+                try {
+                    const edited = await provider.editChannel({ channelId: r.id, name: r.newName });
+                    renamed.push({ ...r, newName: edited?.name ?? r.newName });
+                } catch (error) {
+                    failed.push({ ...r, error: error instanceof Error ? error.message : String(error) });
+                }
+            }
+            return { success: failed.length === 0, matched: planned.length, renamed, failed };
+        },
     },
     {
         name: 'delete_channel',
