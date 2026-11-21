@@ -100,20 +100,54 @@ export interface ChannelRenameOptions {
     categoryId?: string;
 }
 
-// ponytail: structural ReDoS guard — rejects a repeated group (`+`, `*`, `{n,}`) that contains a
-// quantifier at any depth (`(a+)+`, `((a+))+`, `(?:a*b)*`). Names are <=100 chars and a guild has
-// <=500 channels, so only catastrophic backtracking matters. Alternation-based blowups (`(a|aa)+`)
-// still slip through; swap for re2 if that ever bites.
-function hasNestedQuantifier(src: string): boolean {
-    const groups: boolean[] = []; // per open group: does it contain a quantifier?
+// ponytail: structural ReDoS guard instead of a regex engine swap (upgrade path: re2). Rejects:
+//  - a repeated group (`+`, `*`, `{n,}`) holding a quantifier or `|` at any depth
+//    (`(a+)+`, `(?:a*b)*`, `(a|a)+$`, `(.|.)+!`);
+//  - such a group repeated `{n}`/`{n,m}` more than 3 times (`(a+){10}`);
+//  - more than 2 unbounded quantifiers overall, `(\d+){2}` counting as 2 (`.*.*.*!` already costs
+//    ~12 ms per 100-char name, x500 channels on the event loop).
+// `{n}`/`{n,m}` are bounded; `\p{…}`, `\u{…}`, `\k<…>` are skipped as a single atom.
+const MAX_UNBOUNDED_QUANTIFIERS = 2;
+const MAX_AMBIGUOUS_GROUP_REPEAT = 3;
+
+interface Quantifier {
+    len: number;
+    unbounded: boolean;
+    max: number;
+    exact: boolean; // `{n}`: matches one way only
+}
+
+function readQuantifier(src: string, i: number): Quantifier | null {
+    let q: Quantifier | null = null;
+    const ch = src[i];
+    if (ch === '+' || ch === '*') q = { len: 1, unbounded: true, max: Infinity, exact: false };
+    else if (ch === '?') q = { len: 1, unbounded: false, max: 1, exact: false };
+    else if (ch === '{') {
+        const m = /^\{(\d+)(,(\d*))?\}/.exec(src.slice(i));
+        if (m) {
+            const unbounded = m[2] !== undefined && m[3] === '';
+            const max = unbounded ? Infinity : Number(m[3] ?? m[1]);
+            q = { len: m[0].length, unbounded, max, exact: m[2] === undefined };
+        }
+    }
+    if (q && src[i + q.len] === '?') q.len++; // lazy suffix
+    return q;
+}
+
+/** Returns why `src` is rejected as a ReDoS risk, or null when it is accepted. */
+function regexRejection(src: string): string | null {
+    // Per open group: effective unbounded quantifiers, and whether it can match one string many ways.
+    const stack: { unbounded: number; ambiguous: boolean }[] = [{ unbounded: 0, ambiguous: false }];
+    const top = () => stack[stack.length - 1];
     let inClass = false;
-    let closedHadQuantifier: boolean | null = null; // set right after `)`
     for (let i = 0; i < src.length; i++) {
         const ch = src[i];
-        const afterClose = closedHadQuantifier;
-        closedHadQuantifier = null;
         if (ch === '\\') {
-            i++;
+            const next = src[i + 1];
+            const close =
+                (next === 'p' || next === 'P' || next === 'u') && src[i + 2] === '{' ? '}' : next === 'k' && src[i + 2] === '<' ? '>' : null;
+            const end = close ? src.indexOf(close, i + 2) : -1;
+            i = end > 0 ? end : i + 1;
             continue;
         }
         if (inClass) {
@@ -121,25 +155,43 @@ function hasNestedQuantifier(src: string): boolean {
             continue;
         }
         if (ch === '[') inClass = true;
-        else if (ch === '(') groups.push(false);
-        else if (ch === ')') {
-            const had = groups.pop() ?? false;
-            if (had && groups.length) groups[groups.length - 1] = true;
-            closedHadQuantifier = had;
-        } else if (ch === '+' || ch === '*' || ch === '{' || (ch === '?' && src[i - 1] !== '(')) {
-            if (afterClose && ch !== '?') return true;
-            if (groups.length) groups[groups.length - 1] = true;
+        else if (ch === '|') top().ambiguous = true;
+        else if (ch === '(') {
+            stack.push({ unbounded: 0, ambiguous: false });
+            if (src[i + 1] === '?') i++; // `(?:`, `(?=`, `(?<name>`: not a quantifier
+        } else if (ch === ')' && stack.length > 1) {
+            const group = stack.pop()!;
+            const parent = top();
+            const q = readQuantifier(src, i + 1);
+            if (!q) {
+                parent.unbounded += group.unbounded;
+                parent.ambiguous ||= group.ambiguous;
+                continue;
+            }
+            i += q.len;
+            if (group.ambiguous && (q.unbounded || q.max > MAX_AMBIGUOUS_GROUP_REPEAT)) {
+                return 'nested quantifier or alternation inside a repeated group';
+            }
+            parent.unbounded += q.unbounded ? group.unbounded + 1 : group.unbounded * q.max;
+            parent.ambiguous ||= group.ambiguous || !q.exact;
+        } else {
+            const q = readQuantifier(src, i);
+            if (!q) continue;
+            i += q.len - 1;
+            if (q.unbounded) top().unbounded++;
+            if (!q.exact) top().ambiguous = true;
         }
     }
-    return false;
+    if (stack[0].unbounded > MAX_UNBOUNDED_QUANTIFIERS) return `more than ${MAX_UNBOUNDED_QUANTIFIERS} unbounded quantifiers`;
+    return null;
 }
 
 function buildMatcher(opts: ChannelRenameOptions): (name: string) => string {
     if (!opts.find) throw new Error('find must not be empty');
     if (!opts.regex) return name => name.split(opts.find).join(opts.replace);
-    if (opts.find.length > 100 || hasNestedQuantifier(opts.find)) {
-        throw new Error('regex rejected: too long or nested quantifier');
-    }
+    if (opts.find.length > 100) throw new Error('regex rejected: longer than 100 characters');
+    const rejection = regexRejection(opts.find);
+    if (rejection) throw new Error(`regex rejected: ${rejection}`);
     const re = new RegExp(opts.find, 'gu');
     return name => name.replace(re, opts.replace);
 }

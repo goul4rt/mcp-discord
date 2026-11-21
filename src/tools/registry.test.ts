@@ -1867,6 +1867,30 @@ describe('planChannelRenames', () => {
             expect(() => planChannelRenames(channels, { find, replace: 'x', regex: true }), find).not.toThrow();
         }
     });
+
+    it('rejects alternation in a repeated group and too many unbounded quantifiers, fast', () => {
+        // Each of these took seconds on a 25-100 char name before the guard (event loop frozen).
+        const slowName = 'regras-e-informacoes-gerais-' + 'a'.repeat(60);
+        const many = Array.from({ length: 500 }, (_, i) => ({ id: String(i), name: slowName, parentId: null }));
+        const dangerous = ['(a|a)+$', '(.|.)+!', '(a|aa)*$', '((a|b))+', '(x(a|b)y){2,}', '.*.*.*!', '(.*){3}!', '(a+){10}$', '(.|.){20}!'];
+        for (const find of dangerous) {
+            const t = performance.now();
+            expect(() => planChannelRenames(many, { find, replace: 'x', regex: true }), find).toThrow(/regex rejected/);
+            expect(performance.now() - t, find).toBeLessThan(50);
+        }
+    });
+
+    it('accepts bounded repeats and \\p{…}/\\u{…}/\\k<…> escapes, and runs them fast', () => {
+        const ok = ['(\\p{L})+', '(\\u{1F4E2})+', '(\\d+){2}', '(?<n>a)\\k<n>+', '(a|b){3}', '(\\p{Emoji})・(.*)', '(?:ab){2}-\\d+?'];
+        const many = Array.from({ length: 500 }, (_, i) => ({ id: String(i), name: 'a'.repeat(100), parentId: null }));
+        for (const find of ok) {
+            const t = performance.now();
+            expect(() => planChannelRenames(many, { find, replace: 'x', regex: true }), find).not.toThrow();
+            expect(performance.now() - t, find).toBeLessThan(500);
+        }
+        const out = planChannelRenames([{ id: '1', name: '📢・avisos', parentId: null }], { find: '\\u{1F4E2}', replace: '〢', regex: true });
+        expect(out[0].newName).toBe('〢・avisos');
+    });
 });
 
 describe('replace_in_channel_names tool', () => {
